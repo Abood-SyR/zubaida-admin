@@ -1,0 +1,575 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/services/api_service.dart';
+import '../../core/services/category_service.dart';
+
+class EditProductScreen extends StatefulWidget {
+  final Map<String, dynamic> product;
+
+  const EditProductScreen({super.key, required this.product});
+
+  @override
+  State<EditProductScreen> createState() => _EditProductScreenState();
+}
+
+class _EditProductScreenState extends State<EditProductScreen> {
+  final ApiService _apiService = ApiService();
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _nameController;
+  late TextEditingController _descController;
+  late TextEditingController _priceController;
+  late TextEditingController _costPriceController;
+  late TextEditingController _stockController;
+  late TextEditingController _usageController;
+  late TextEditingController _ingredientsController;
+  late TextEditingController _compatibilityController;
+
+  List<dynamic> _categories = [];
+  String? _selectedCategoryId;
+  String _selectedSkinHairType = 'hair';
+  String _selectedSize = 'standard';
+
+  String? _currentThumbnailUrl;
+  List<String> _currentAdditionalImageUrls = [];
+
+  Uint8List? _newThumbnailBytes;
+  String? _newThumbnailName;
+  final List<Map<String, dynamic>> _newAdditionalImages = [];
+
+  bool _isLoading = false;
+  double _uploadProgress = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.product;  
+
+    _nameController = TextEditingController(text: _extractText(p['name']));  
+    _descController = TextEditingController(text: _extractText(p['description']));  
+    _priceController = TextEditingController(text: p['price']?.toString() ?? '0');  
+    _costPriceController = TextEditingController(text: p['cost_price']?.toString() ?? '0');  
+    _stockController = TextEditingController(text: p['stock_quantity']?.toString() ?? '0');  
+    _usageController = TextEditingController(text: _extractText(p['usage_instructions']));  
+    _ingredientsController = TextEditingController(text: _extractText(p['ingredients']));  
+    _compatibilityController = TextEditingController(text: _extractText(p['compatibility']));  
+
+    _currentThumbnailUrl = p['thumbnail_url']?.toString();  
+    if (p['images'] != null && p['images'] is List) {  
+      _currentAdditionalImageUrls = List<String>.from(p['images']);  
+    }
+
+    _selectedCategoryId = p['category_id']?.toString();  
+
+    if (p['skin_hair_type'] != null && (p['skin_hair_type'] as List).isNotEmpty) {  
+      _selectedSkinHairType = p['skin_hair_type'][0].toString();  
+    }
+
+    if (p['sizes'] != null && (p['sizes'] as List).isNotEmpty) {
+      _selectedSize = p['sizes'][0].toString();
+    }
+
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await CategoryService.getCategories();  
+      setState(() {
+        _categories = categories;  
+        if (_selectedCategoryId == null && _categories.isNotEmpty) {  
+          _selectedCategoryId = _categories[0]['id']?.toString();  
+        }
+      });
+    } catch (_) {}
+  }
+
+  String _extractText(dynamic field) {
+    if (field is Map) {
+      return field['ar']?.toString() ?? (field.isNotEmpty ? field.values.first?.toString() : '') ?? '';  
+    }
+    return field?.toString() ?? '';  
+  }
+
+  Future<void> _pickImageLocally({bool isThumbnail = true}) async {
+    final picker = ImagePicker();
+
+    if (isThumbnail) {
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null) return;
+
+      final bytes = await pickedFile.readAsBytes();
+      Uint8List compressedBytes = bytes;
+      if (!kIsWeb) {
+        compressedBytes = await FlutterImageCompress.compressWithList(
+          bytes, minWidth: 900, minHeight: 900, quality: 80,
+        );
+      }
+
+      setState(() {
+        _newThumbnailBytes = compressedBytes;
+        _newThumbnailName = 'thumb_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      });
+    } else {
+      final pickedFiles = await picker.pickMultiImage();
+      if (pickedFiles.isEmpty) return;
+
+      for (var pickedFile in pickedFiles) {
+        final bytes = await pickedFile.readAsBytes();
+        Uint8List compressedBytes = bytes;
+        if (!kIsWeb) {
+          compressedBytes = await FlutterImageCompress.compressWithList(
+            bytes, minWidth: 900, minHeight: 900, quality: 80,
+          );
+        }
+
+        final fileName = 'sub_${DateTime.now().millisecondsSinceEpoch}_${_newAdditionalImages.length}.jpg';
+        _newAdditionalImages.add({
+          'bytes': compressedBytes,
+          'name': fileName,
+        });
+      }
+      setState(() {});
+    }
+  }
+
+  Future<void> _updateProduct() async {
+    if (!_formKey.currentState!.validate()) return;  
+
+    setState(() {
+      _isLoading = true;
+      _uploadProgress = 0.05;
+    });
+
+    final productId = widget.product['id'];  
+
+    try {
+      String? finalThumbnailUrl = _currentThumbnailUrl;
+
+      if (_newThumbnailBytes != null && _newThumbnailName != null) {
+        setState(() => _uploadProgress = 0.2);
+        await Supabase.instance.client.storage
+            .from('products')
+            .uploadBinary(_newThumbnailName!, _newThumbnailBytes!, fileOptions: const FileOptions(upsert: true));
+
+        finalThumbnailUrl = Supabase.instance.client.storage
+            .from('products')
+            .getPublicUrl(_newThumbnailName!);
+      }
+
+      List<String> finalAdditionalUrls = List.from(_currentAdditionalImageUrls);
+      if (_newAdditionalImages.isNotEmpty) {
+        double step = 0.5 / _newAdditionalImages.length;
+        for (int i = 0; i < _newAdditionalImages.length; i++) {
+          final img = _newAdditionalImages[i];
+          await Supabase.instance.client.storage
+              .from('products')
+              .uploadBinary(img['name'], img['bytes'], fileOptions: const FileOptions(upsert: true));
+
+          final url = Supabase.instance.client.storage
+              .from('products')
+              .getPublicUrl(img['name']);
+
+          finalAdditionalUrls.add(url);
+          setState(() {
+            _uploadProgress = 0.3 + (step * (i + 1));
+          });
+        }
+      }
+
+      setState(() => _uploadProgress = 0.85);
+
+      final updatedData = {
+        "name": {"ar": _nameController.text.trim()},
+        "description": {"ar": _descController.text.trim()},
+        "price": double.parse(_priceController.text),
+        "cost_price": double.tryParse(_costPriceController.text) ?? 0.0,
+        "stock_quantity": int.parse(_stockController.text),
+        "thumbnail_url": finalThumbnailUrl,
+        "images": finalAdditionalUrls.isNotEmpty ? finalAdditionalUrls : [finalThumbnailUrl],
+        "sizes": [_selectedSize],
+        "skin_hair_type": [_selectedSkinHairType],
+        "usage_instructions": {"ar": _usageController.text.trim().isNotEmpty ? _usageController.text.trim() : "استخدام عادي"},
+        "ingredients": {"ar": _ingredientsController.text.trim().isNotEmpty ? _ingredientsController.text.trim() : "مكونات طبيعية"},
+        "compatibility": {"ar": _compatibilityController.text.trim().isNotEmpty ? _compatibilityController.text.trim() : "مناسب لجميع الأنواع"},
+        "attributes": widget.product['attributes'] ?? {},  
+        "category_id": _selectedCategoryId ?? widget.product['category_id'],  
+        "is_active": widget.product['is_active'] ?? true,  
+      };
+
+      await _apiService.dio.put('/products/$productId', data: updatedData);  
+
+      setState(() => _uploadProgress = 1.0);
+
+      if (!mounted) return;  
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث المنتج بنجاح'), backgroundColor: Colors.green));  
+      Navigator.pop(context, true);  
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل التحديث: ${e.toString()}'), backgroundColor: Colors.red));  
+    } finally {
+      if (mounted) setState(() => _isLoading = false);  
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8F9FA),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        centerTitle: true,
+        title: const Text('تعديل تفاصيل المنتج', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+      ),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('1. الصورة الرئيسية للمنتج', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: _isLoading ? null : () => _pickImageLocally(isThumbnail: true),
+                    child: Container(
+                      height: 200,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[900] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: (_newThumbnailBytes != null || _currentThumbnailUrl != null) 
+                              ? theme.colorScheme.primary 
+                              : Colors.grey.withOpacity(0.3),
+                          width: 2,
+                        ),
+                        image: _newThumbnailBytes != null
+                            ? DecorationImage(image: MemoryImage(_newThumbnailBytes!), fit: BoxFit.cover)
+                            : (_currentThumbnailUrl != null
+                                ? DecorationImage(image: NetworkImage(_currentThumbnailUrl!), fit: BoxFit.cover)
+                                : null),
+                      ),
+                      child: (_newThumbnailBytes == null && _currentThumbnailUrl == null)
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_photo_alternate_rounded, size: 48, color: theme.colorScheme.primary),
+                                const SizedBox(height: 8),
+                                const Text('انقر لتغيير الصورة الرئيسية', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+                              ],
+                            )
+                          : Stack(
+                              children: [
+                                Positioned(
+                                  top: 10,
+                                  right: 10,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                                    child: Text(
+                                      _newThumbnailBytes != null ? 'رئيسية جديدة' : 'الرئيسية الحالية',
+                                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('2. الصور الفرعية الإضافية', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      TextButton.icon(
+                        onPressed: _isLoading ? null : () => _pickImageLocally(isThumbnail: false),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('إضافة صور'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 100,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        GestureDetector(
+                          onTap: _isLoading ? null : () => _pickImageLocally(isThumbnail: false),
+                          child: Container(
+                            width: 100,
+                            margin: const EdgeInsets.only(left: 10),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.grey[900] : Colors.grey[200],
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                            ),
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo_rounded, color: Colors.grey),
+                                SizedBox(height: 4),
+                                Text('إضافة', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        ..._currentAdditionalImageUrls.asMap().entries.map((entry) {
+                          int index = entry.key;
+                          String url = entry.value;
+                          return Container(
+                            width: 100,
+                            margin: const EdgeInsets.only(left: 10),
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Image.network(url, width: 100, height: 100, fit: BoxFit.cover),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: InkWell(
+                                    onTap: () => setState(() => _currentAdditionalImageUrls.removeAt(index)),
+                                    child: Container(
+                                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                      padding: const EdgeInsets.all(4),
+                                      child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        ..._newAdditionalImages.asMap().entries.map((entry) {
+                          int index = entry.key;
+                          var img = entry.value;
+                          return Container(
+                            width: 100,
+                            margin: const EdgeInsets.only(left: 10),
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Image.memory(img['bytes'], width: 100, height: 100, fit: BoxFit.cover),
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: InkWell(
+                                    onTap: () => setState(() => _newAdditionalImages.removeAt(index)),
+                                    child: Container(
+                                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                      padding: const EdgeInsets.all(4),
+                                      child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 4,
+                                  left: 4,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    decoration: const BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.all(Radius.circular(6))),
+                                    child: const Text('جديد', style: TextStyle(fontSize: 9, color: Colors.white)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  const Text('3. البيانات الأساسية', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'اسم المنتج',
+                      prefixIcon: const Icon(Icons.badge_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    validator: (v) => v!.isEmpty ? 'حقل مطلوب' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _descController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'وصف المنتج',
+                      alignLabelWithHint: true,
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(bottom: 40),
+                        child: Icon(Icons.description_outlined),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _priceController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'سعر البيع',
+                            prefixIcon: const Icon(Icons.payments_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          validator: (v) => v!.isEmpty ? 'حقل مطلوب' : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _costPriceController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'سعر التكلفة',
+                            prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _stockController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'المخزون',
+                            prefixIcon: const Icon(Icons.inventory_2_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          validator: (v) => v!.isEmpty ? 'حقل مطلوب' : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+
+                  const Text('4. التصنيف والمواصفات', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedCategoryId,
+                          decoration: InputDecoration(
+                            labelText: 'الفئة',
+                            prefixIcon: const Icon(Icons.category_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          items: _categories.map<DropdownMenuItem<String>>((cat) {
+                            return DropdownMenuItem<String>(
+                              value: cat['id']?.toString(),
+                              child: Text(cat['name']?.toString() ?? ''),
+                            );
+                          }).toList(),
+                          onChanged: (val) => setState(() => _selectedCategoryId = val),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedSkinHairType,
+                          decoration: InputDecoration(
+                            labelText: 'نوع العناية',
+                            prefixIcon: const Icon(Icons.spa_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'hair', child: Text('شعر')),
+                            DropdownMenuItem(value: 'skin', child: Text('بشرة')),
+                            DropdownMenuItem(value: 'body', child: Text('جسم')),
+                            DropdownMenuItem(value: 'all', child: Text('الكل')),
+                          ],
+                          onChanged: (val) => setState(() => _selectedSkinHairType = val!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _usageController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: 'طريقة الاستعمال',
+                      prefixIcon: const Icon(Icons.menu_book_rounded),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _ingredientsController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: 'المكونات الأساسية',
+                      prefixIcon: const Icon(Icons.science_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _compatibilityController,
+                    decoration: InputDecoration(
+                      labelText: 'التوافق (مع أنواع الشعر/البشرة)',
+                      prefixIcon: const Icon(Icons.check_circle_outline_rounded),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  const SizedBox(height: 36),
+
+                  if (_isLoading) ...[
+                    LinearProgressIndicator(value: _uploadProgress, minHeight: 8, borderRadius: BorderRadius.circular(4)),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Text(
+                        'جاري ضغط ورفع الصور وتحديث المنتج... ${(_uploadProgress * 100).toInt()}%',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
+                  ] else ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
+                        ),
+                        onPressed: _updateProduct,
+                        icon: const Icon(Icons.cloud_upload_rounded),
+                        label: const Text('حفظ التعديلات وتحديث السيرفر', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

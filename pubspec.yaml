@@ -1,0 +1,44 @@
+name: dashboard
+description: "A professional multi-platform admin dashboard for Zubaida Beauty."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # الاتصال بالشبكة و APIs
+  dio: ^5.4.0
+
+  # إدارة الحالة والثيمات
+  provider: ^6.1.1
+
+  # التخزين المحلي (Token والوضع المفضل)
+  shared_preferences: ^2.2.2
+  image_picker: ^1.2.3
+  flutter_image_compress: ^2.1.0 # لضغط الصور وتقليل حجمها قبل الرفع
+  supabase_flutter: ^2.3.0
+  # الرسوم البيانية والإحصائيات للوحة التحكم
+  fl_chart: ^0.66.0
+  flutter_slidable: ^3.0.0
+  # الأيقونات والتصميم المتجاوب
+  cupertino_icons: ^1.0.6
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.4.2
+  shimmer: ^3.0.0
+  video_player: ^2.8.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  # يمكنك إضافة الخطوط أو الأصول (Assets) هنا لاحقاً
+  # assets:
+  #   - assets/images/
