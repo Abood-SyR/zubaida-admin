@@ -5,6 +5,84 @@ import 'package:shimmer/shimmer.dart';
 import 'dart:convert';
 import 'package:dashboard/core/services/api_service.dart';
 
+// شاشة أرشيف التقارير الكاملة ("عرض الكل")
+class AllReportsScreen extends StatelessWidget {
+  final List<dynamic> reports;
+  const AllReportsScreen({super.key, required this.reports});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('أرشيف التقارير الكامل'), centerTitle: true),
+      body: reports.isEmpty
+          ? const Center(child: Text('لا توجد تقارير محفوظة حالياً'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: reports.length,
+              itemBuilder: (context, index) {
+                final report = reports[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: ListTile(
+                    title: Text(report['period_name'] ?? 'تقرير دوري', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('النوع: ${report['report_type']} | التاريخ: ${report['created_at']?.toString().substring(0, 10)}'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => ReportDetailScreen(report: report)),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+
+// شاشة تفاصيل التقرير المحدد
+class ReportDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> report;
+  const ReportDetailScreen({super.key, required this.report});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = report['metrics'] ?? {};
+    return Scaffold(
+      appBar: AppBar(title: Text(report['period_name'] ?? 'تفاصيل التقرير'), centerTitle: true),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('نوع التقرير: ${report['report_type']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('فترة التقرير: من ${report['start_date']?.toString().substring(0, 10)} إلى ${report['end_date']?.toString().substring(0, 10)}', style: const TextStyle(color: Colors.grey)),
+            const Divider(height: 24),
+            const Text('الإحصائيات والقياسات المسجلة:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            ...metrics.entries.map((e) {
+              if (e.key == 'status_breakdown') return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(e.key, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class HomeAnalyticsScreen extends StatefulWidget {
   const HomeAnalyticsScreen({super.key});
 
@@ -22,11 +100,14 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
   Map<String, dynamic> _paymentMethods = {};
   List<dynamic> _topProducts = [];
   List<dynamic> _lowStockProducts = [];
+  List<dynamic> _topOffers = [];
+  List<dynamic> _topGroups = [];
 
   final ApiService _apiService = ApiService();
   
   static const String _cacheKeyDashboard = 'cached_dashboard_data';
   static const String _cacheKeyReports = 'cached_reports_data';
+  static const String _cacheKeyInsights = 'cached_insights_data';
 
   @override
   void initState() {
@@ -38,10 +119,12 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final cachedDashboard = prefs.getString(_cacheKeyDashboard);
     final cachedReports = prefs.getString(_cacheKeyReports);
+    final cachedInsights = prefs.getString(_cacheKeyInsights);
 
     if (cachedDashboard != null && cachedReports != null) {
       try {
         final data = jsonDecode(cachedDashboard);
+        final insights = cachedInsights != null ? jsonDecode(cachedInsights) : {};
         setState(() {
           _revenueTimeline = data['revenue_timeline'] ?? [];
           _statsData = data['overview'] ?? {};
@@ -50,6 +133,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
           _topProducts = data['top_performing_products'] ?? [];
           _lowStockProducts = data['low_stock_alert'] ?? [];
           _savedReports = jsonDecode(cachedReports);
+          _topOffers = insights['top_offers'] ?? [];
+          _topGroups = insights['top_groups'] ?? [];
           _isLoading = false;
         });
         return;
@@ -62,19 +147,21 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
   Future<void> _fetchAnalyticsData() async {
     setState(() {
       _isLoading = true;
-      
     });
 
     try {
       final response = await _apiService.dio.get('/analytics/dashboard-pro');
       final reportsResponse = await _apiService.dio.get('/analytics/periodic-reports/history');
+      final insightsResponse = await _apiService.dio.get('/analytics/offers-groups-insights');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_cacheKeyDashboard, jsonEncode(response.data));
       await prefs.setString(_cacheKeyReports, jsonEncode(reportsResponse.data));
+      await prefs.setString(_cacheKeyInsights, jsonEncode(insightsResponse.data));
 
       setState(() {
         final data = response.data ?? {};
+        final insights = insightsResponse.data ?? {};
         _revenueTimeline = data['revenue_timeline'] ?? [];
         _statsData = data['overview'] ?? {};
         _categoriesAnalytics = data['categories_breakdown'] ?? [];
@@ -82,6 +169,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
         _topProducts = data['top_performing_products'] ?? [];
         _lowStockProducts = data['low_stock_alert'] ?? [];
         _savedReports = reportsResponse.data ?? [];
+        _topOffers = insights['top_offers'] ?? [];
+        _topGroups = insights['top_groups'] ?? [];
         _isLoading = false;
       });
     } catch (e) {
@@ -118,7 +207,6 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // العنوان الرئيسي وزر تحديث البيانات
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -146,7 +234,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'متابعة أداء النظام، المبيعات، والأرباح الحية',
+                                'متابعة أداء النظام، المبيعات، والعروض الحية',
                                 style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                               ),
                             ],
@@ -169,7 +257,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 1. شبكة البطاقات المالية والإحصائية
+                    // 1. البطاقات المالية والإحصائية
                     GridView.count(
                       crossAxisCount: isDesktop ? 3 : 2,
                       crossAxisSpacing: 16,
@@ -188,7 +276,25 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 2. الرسوم البيانية وتوزيع طرق الدفع
+                    // 2. تحليل العروض والمجموعات (الإحصائيات الجديدة)
+                    if (isDesktop)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildOffersInsightsCard(context)),
+                          const SizedBox(width: 24),
+                          Expanded(child: _buildGroupsInsightsCard(context)),
+                        ],
+                      )
+                    else ...[
+                      _buildOffersInsightsCard(context),
+                      const SizedBox(height: 20),
+                      _buildGroupsInsightsCard(context),
+                    ],
+
+                    const SizedBox(height: 24),
+
+                    // 3. الرسوم البيانية وتوزيع طرق الدفع
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,7 +312,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
                     const SizedBox(height: 24),
 
-                    // 3. المنتجات الأكثر مبيعاً وأداء الأقسام (بحد أقصى 10)
+                    // 4. المنتجات الأكثر مبيعاً وأداء الأقسام
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,7 +330,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
                     const SizedBox(height: 24),
 
-                    // 4. تنبيهات المخزون وأرشيف التقارير (بحد أقصى 10)
+                    // 5. تنبيهات المخزون وأرشيف التقارير
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,14 +375,111 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
+  // بطاقة إحصائيات العروض النشطة
+  Widget _buildOffersInsightsCard(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: 280,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.local_offer_outlined, color: Colors.orange, size: 20),
+              SizedBox(width: 8),
+              Text('أداء العروض الأكثر طلباً', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _topOffers.isEmpty
+                ? const Center(child: Text('لا توجد مبيعات للعروض حالياً', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                : ListView.builder(
+                    itemCount: _topOffers.length > 5 ? 5 : _topOffers.length,
+                    itemBuilder: (context, index) {
+                      final offer = _topOffers[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(_getLocalizedText(offer['name']), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                            Text('${offer['units_sold']} مبيع', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            const SizedBox(width: 8),
+                            Text('${offer['total_revenue']} ل.س', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // بطاقة إحصائيات المجموعات النشطة
+  Widget _buildGroupsInsightsCard(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: 280,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.purple.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.group_work_outlined, color: Colors.purple, size: 20),
+              SizedBox(width: 8),
+              Text('أداء المجموعات الأكثر طلباً', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _topGroups.isEmpty
+                ? const Center(child: Text('لا توجد مبيعات للمجموعات حالياً', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                : ListView.builder(
+                    itemCount: _topGroups.length > 5 ? 5 : _topGroups.length,
+                    itemBuilder: (context, index) {
+                      final group = _topGroups[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(_getLocalizedText(group['name']), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                            Text('${group['units_sold']} مبيع', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            const SizedBox(width: 8),
+                            Text('${group['total_revenue']} ل.س', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRevenueLineChart(BuildContext context) {
     final theme = Theme.of(context);
-    final List<dynamic> revenueTimeline = _revenueTimeline; // تم التعديل هنا
     List<FlSpot> spots = [];
     double maxRevenue = 0;
 
-    for (int i = 0; i < revenueTimeline.length; i++) {
-      final item = revenueTimeline[i];
+    for (int i = 0; i < _revenueTimeline.length; i++) {
+      final item = _revenueTimeline[i];
       final revenue = double.tryParse(item['revenue']?.toString() ?? '0') ?? 0.0;
       if (revenue > maxRevenue) maxRevenue = revenue;
       spots.add(FlSpot(i.toDouble(), revenue));
@@ -305,7 +508,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
             child: LineChart(
               LineChartData(
                 minX: 0,
-                maxX: revenueTimeline.isNotEmpty ? (revenueTimeline.length - 1).toDouble() : 1.0,
+                maxX: _revenueTimeline.isNotEmpty ? (_revenueTimeline.length - 1).toDouble() : 1.0,
                 minY: 0,
                 maxY: maxRevenue > 0 ? maxRevenue * 1.2 : 1000.0,
                 gridData: const FlGridData(show: true, drawVerticalLine: false),
@@ -330,8 +533,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                       interval: 1,
                       getTitlesWidget: (value, meta) {
                         int index = value.toInt();
-                        if (index >= 0 && index < revenueTimeline.length) {
-                          String dateStr = revenueTimeline[index]['date'] ?? '';
+                        if (index >= 0 && index < _revenueTimeline.length) {
+                          String dateStr = _revenueTimeline[index]['date'] ?? '';
                           return Padding(
                             padding: const EdgeInsets.only(top: 8.0),
                             child: Text(dateStr, style: const TextStyle(fontSize: 9)),
@@ -443,9 +646,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(
-                              child: Text(productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-                            ),
+                            Expanded(child: Text(productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
                             Text('${p['sold_count']} مبيعات', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                             const SizedBox(width: 12),
                             Text('${p['total_product_revenue']} ل.س', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
@@ -554,7 +755,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(item['name'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text(_getLocalizedText(item['name']), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             Chip(
                               label: Text('${item['stock_quantity']} متبقي', style: const TextStyle(fontSize: 10, color: Colors.red)),
                               backgroundColor: Colors.red.withOpacity(0.1),
@@ -614,7 +815,10 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                   ),
                   TextButton(
                     onPressed: () {
-                      // TODO: الانتقال لصفحة كافة التقارير ReportsListScreen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => AllReportsScreen(reports: _savedReports)),
+                      );
                     },
                     child: const Text('عرض الكل', style: TextStyle(fontSize: 12)),
                   ),
@@ -634,7 +838,10 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                       final report = limitedReports[index];
                       return InkWell(
                         onTap: () {
-                          // TODO: توجيه المستخدم لتفاصيل التقرير
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => ReportDetailScreen(report: report)),
+                          );
                         },
                         child: _buildReportHistoryItem(
                           report['period_name'] ?? 'تقرير دوري',
@@ -675,7 +882,6 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
-  // مظهر التحميل باستخدام Shimmer
   Widget _buildShimmerLoading(bool isDesktop) {
     return Shimmer.fromColors(
       baseColor: Colors.grey[800]!,

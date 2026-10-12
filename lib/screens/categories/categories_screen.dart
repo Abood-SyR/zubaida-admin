@@ -4,6 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/services/api_service.dart';
 
 class CategoriesScreen extends StatefulWidget {
@@ -162,15 +165,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     _showLoadingDialog(newStatus ? 'جاري تفعيل القسم...' : 'جاري إيقاف القسم...');
 
     try {
-      // إرسال البيانات المطلوبة للـ Update حسب الـ Schema (name, is_active, image_url, etc.)
+      FormData formData = FormData.fromMap({
+        "name": jsonEncode(category['name']),
+        "is_active": newStatus.toString(),
+      });
+
       await _apiService.dio.put(
         '/categories/$categoryId', 
-        data: {
-          "name": category['name'],
-          "is_active": newStatus,
-          "image_url": category['image_url'],
-          "parent_id": category['parent_id'],
-        },
+        data: formData,
       );
       
       setState(() {
@@ -244,10 +246,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     final nameArController = TextEditingController(
       text: isEditing ? _getCategoryName(categoryToEdit['name']) : '',
     );
-    final imageUrlController = TextEditingController(
-      text: isEditing ? (categoryToEdit['image_url']?.toString() ?? '') : '',
-    );
     bool isActive = isEditing ? (categoryToEdit['is_active'] ?? true) : true;
+    String? existingImageUrl = isEditing ? categoryToEdit['image_url']?.toString() : null;
+    XFile? selectedImageFile;
 
     showDialog(
       context: context,
@@ -265,15 +266,54 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: imageUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'رابط الصورة (اختياري)',
-                    border: OutlineInputBorder(),
+                const SizedBox(height: 16),
+                
+                // معاينة واختيار الصورة من الملفات
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                    if (pickedFile != null) {
+                      setDialogState(() {
+                        selectedImageFile = pickedFile;
+                      });
+                    }
+                  },
+                  child: Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    ),
+                    child: selectedImageFile != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: kIsWeb
+                                ? Image.network(selectedImageFile!.path, fit: BoxFit.cover)
+                                : Image.file(File(selectedImageFile!.path), fit: BoxFit.cover),
+                          )
+                        : existingImageUrl != null && existingImageUrl.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  existingImageUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 40, color: Colors.grey),
+                                ),
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_a_photo_outlined, size: 32, color: Colors.grey),
+                                  SizedBox(height: 8),
+                                  Text('اضغط لاختيار صورة من الجهاز', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                ],
+                              ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 SwitchListTile(
                   title: const Text('حالة النشاط'),
                   value: isActive,
@@ -293,21 +333,42 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 _showLoadingDialog(isEditing ? 'جاري تعديل القسم...' : 'جاري إضافة القسم...');
 
                 try {
-                  final payload = {
-                    "name": {"ar": nameText},
-                    "image_url": imageUrlController.text.trim().isEmpty ? null : imageUrlController.text.trim(),
-                    "is_active": isActive,
-                    "parent_id": null,
-                  };
+                  FormData formData = FormData.fromMap({
+                    "name": jsonEncode({"ar": nameText}),
+                    "is_active": isActive.toString(),
+                  });
+
+                  if (selectedImageFile != null) {
+                    String fileName = selectedImageFile!.name;
+                    if (kIsWeb) {
+                      var bytes = await selectedImageFile!.readAsBytes();
+                      formData.files.add(MapEntry(
+                        "file",
+                        MultipartFile.fromBytes(bytes, filename: fileName),
+                      ));
+                    } else {
+                      formData.files.add(MapEntry(
+                        "file",
+                        await MultipartFile.fromFile(selectedImageFile!.path, filename: fileName),
+                      ));
+                    }
+                  }
 
                   if (isEditing) {
-                    await _apiService.dio.put('/categories/${categoryToEdit['id']}', data: payload); 
+                    await _apiService.dio.put(
+                      '/categories/${categoryToEdit['id']}',
+                      data: formData,
+                    ); 
                   } else {
-                    await _apiService.dio.post('/categories/', data: payload); 
+                    await _apiService.dio.post(
+                      '/categories/',
+                      data: formData,
+                    ); 
                   }
 
                   _hideLoadingDialog();
                   if (!mounted) return;
+                  
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(isEditing ? 'تم تعديل القسم بنجاح' : 'تم إضافة القسم بنجاح'),
@@ -318,8 +379,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 } catch (e) {
                   _hideLoadingDialog();
                   if (!mounted) return;
+                  
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('فشل حفظ القسم'), backgroundColor: Colors.red),
+                    const SnackBar(content: Text('فشل حفظ القسم، تأكد من الاتصال'), backgroundColor: Colors.red),
                   );
                 }
               },

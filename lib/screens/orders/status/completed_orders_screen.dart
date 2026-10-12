@@ -210,7 +210,7 @@ class _CompletedOrdersScreenState extends State<CompletedOrdersScreen> {
                                           children: [
                                             Text('طلب منجز #$shortId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                                             const SizedBox(height: 4),
-                                            Text('الزبون: $customerName', style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                                            Text('الزبون: $customerName', style: const TextStyle(color: Color.fromARGB(255, 211, 209, 209), fontSize: 13)),
                                             const SizedBox(height: 2),
                                             Text('المبلغ الإجمالي: $amount ل.س', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                                           ],

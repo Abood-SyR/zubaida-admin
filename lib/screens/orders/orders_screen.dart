@@ -23,13 +23,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
   List<dynamic> _orders = [];
   String? _errorMessage;
   
-  // نظام الفلاتر العلوي
+  // نظام الفلاتر العلوي (تم تصحيح shipped إلى shipping لتتوافق مع السيرفر)
   String? _selectedStatusFilter;
   final List<Map<String, String>> _statusFilters = [
     {'key': '', 'label': 'الكل'},
     {'key': 'pending', 'label': 'قيد المراجعة'},
     {'key': 'processing', 'label': 'قيد التجهيز'},
-    {'key': 'shipped', 'label': 'تم الشحن'},
+    {'key': 'shipping', 'label': 'جاري الشحن'},
     {'key': 'completed', 'label': 'مكتمل'},
     {'key': 'cancelled', 'label': 'ملغي'},
   ];
@@ -104,7 +104,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     switch (status) {
       case 'pending': return 'قيد المراجعة';
       case 'processing': return 'قيد التجهيز';
-      case 'shipped': return 'تم الشحن';
+      case 'shipping': return 'جاري الشحن';
       case 'completed': return 'مكتمل';
       case 'cancelled': return 'ملغي';
       default: return status;
@@ -115,7 +115,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     switch (status) {
       case 'pending': return Colors.orange;
       case 'processing': return Colors.blue;
-      case 'shipped': return Colors.purple;
+      case 'shipping': return Colors.purple;
       case 'completed': return Colors.green;
       case 'cancelled': return Colors.red;
       default: return Colors.grey;
@@ -200,7 +200,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                   margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   elevation: 1,
                                   child: ListTile(
-                                    dense: true, // تصغير حجم العنصر لملء الشاشة بطلبkات كثيرة
+                                    dense: true,
                                     leading: CircleAvatar(
                                       backgroundColor: _getStatusColor(status).withOpacity(0.2),
                                       child: Text(
@@ -223,7 +223,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                       ),
                                       backgroundColor: _getStatusColor(status),
                                     ),
-                                    // النقر سينقلك حصرياً إلى صفحة تفاصيل الطلب المخصصة
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -231,7 +230,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                           builder: (context) => OrderDetailScreen(order: order),
                                         ),
                                       ).then((_) {
-                                        // إعادة تحميل القائمة عند العودة في حال تم تعديل حالة الطلب في صفحة التفاصيل
                                         _fetchOrders();
                                       });
                                     },
