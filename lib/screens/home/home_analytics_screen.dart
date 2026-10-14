@@ -102,6 +102,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
   List<dynamic> _lowStockProducts = [];
   List<dynamic> _topOffers = [];
   List<dynamic> _topGroups = [];
+  List<dynamic> _topSearchedItems = [];
 
   final ApiService _apiService = ApiService();
   
@@ -135,6 +136,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
           _savedReports = jsonDecode(cachedReports);
           _topOffers = insights['top_offers'] ?? [];
           _topGroups = insights['top_groups'] ?? [];
+          _topSearchedItems = insights['top_searched_items'] ?? [];
           _isLoading = false;
         });
         return;
@@ -171,6 +173,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
         _savedReports = reportsResponse.data ?? [];
         _topOffers = insights['top_offers'] ?? [];
         _topGroups = insights['top_groups'] ?? [];
+        _topSearchedItems = insights['top_searched_items'] ?? [];
         _isLoading = false;
       });
     } catch (e) {
@@ -276,7 +279,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 2. تحليل العروض والمجموعات (الإحصائيات الجديدة)
+                    // 2. تحليل العروض والمجموعات
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -294,20 +297,20 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
                     const SizedBox(height: 24),
 
-                    // 3. الرسوم البيانية وتوزيع طرق الدفع
+                    // 3. الرسم البياني للإيرادات وتوزيع طرق الدفع (مخطط دائري تفاعلي)
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(flex: 3, child: _buildRevenueLineChart(context)),
                           const SizedBox(width: 24),
-                          Expanded(flex: 2, child: _buildPaymentMethodsCard(context)),
+                          Expanded(flex: 2, child: _buildPaymentMethodsPieChart(context)),
                         ],
                       )
                     else ...[
                       _buildRevenueLineChart(context),
                       const SizedBox(height: 20),
-                      _buildPaymentMethodsCard(context),
+                      _buildPaymentMethodsPieChart(context),
                     ],
 
                     const SizedBox(height: 24),
@@ -330,18 +333,22 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
                     const SizedBox(height: 24),
 
-                    // 5. تنبيهات المخزون وأرشيف التقارير
+                    // 5. تنبيهات المخزون، تقارير البحث الذكية (مخطط أعمدة)، وأرشيف التقارير
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(flex: 2, child: _buildLowStockAlertCard(context)),
                           const SizedBox(width: 24),
+                          Expanded(flex: 2, child: _buildSearchInsightsBarChart(context)),
+                          const SizedBox(width: 24),
                           Expanded(flex: 3, child: _buildSavedPeriodicReportsSection(context)),
                         ],
                       )
                     else ...[
                       _buildLowStockAlertCard(context),
+                      const SizedBox(height: 20),
+                      _buildSearchInsightsBarChart(context),
                       const SizedBox(height: 20),
                       _buildSavedPeriodicReportsSection(context),
                     ],
@@ -375,7 +382,6 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
-  // بطاقة إحصائيات العروض النشطة
   Widget _buildOffersInsightsCard(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -424,7 +430,6 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
-  // بطاقة إحصائيات المجموعات النشطة
   Widget _buildGroupsInsightsCard(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -567,8 +572,25 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
-  Widget _buildPaymentMethodsCard(BuildContext context) {
+  // مخطط دائري تفاعلي جميل (Pie Chart) لتوزيع طرق الدفع
+  Widget _buildPaymentMethodsPieChart(BuildContext context) {
     final theme = Theme.of(context);
+    final colorsList = [Colors.blue, Colors.purple, Colors.orange, Colors.teal, Colors.pink];
+
+    int i = 0;
+    List<PieChartSectionData> sections = _paymentMethods.entries.map((entry) {
+      final color = colorsList[i % colorsList.length];
+      i++;
+      double val = double.tryParse(entry.value.toString()) ?? 0;
+      return PieChartSectionData(
+        color: color,
+        value: val > 0 ? val : 1,
+        title: '${entry.value}',
+        radius: 50,
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+      );
+    }).toList();
+
     return Container(
       height: 320,
       padding: const EdgeInsets.all(20),
@@ -582,29 +604,126 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
         children: [
           const Text('توزيع طرق الدفع', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('بحسب العمليات المسجلة في النظام', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text('نسبة استخدام طرق الدفع المختلفة', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
           const SizedBox(height: 12),
           Expanded(
             child: _paymentMethods.isEmpty
                 ? const Center(child: Text('لا توجد بيانات دفع مسجلة', style: TextStyle(fontSize: 12, color: Colors.grey)))
-                : ListView(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: _paymentMethods.entries.map((entry) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            Chip(
-                              label: Text('${entry.value} طلب', style: const TextStyle(fontSize: 11)),
-                              backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-                            ),
-                          ],
+                : Row(
+                    children: [
+                      Expanded(
+                        child: PieChart(
+                          PieChartData(
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 35,
+                            sections: sections,
+                          ),
                         ),
-                      );
-                    }).toList(),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _paymentMethods.entries.map((e) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: Row(
+                              children: [
+                                Container(width: 10, height: 10, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.purple)),
+                                const SizedBox(width: 6),
+                                Text('${e.key} (${e.value})', style: const TextStyle(fontSize: 11)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // مخطط أعمدة احترافي وجذاب (Bar Chart) لكلمات البحث التي بلا نتائج المحفوظة بتقرير البحث
+  Widget _buildSearchInsightsBarChart(BuildContext context) {
+    final theme = Theme.of(context);
+    final limitedSearches = _topSearchedItems.take(5).toList();
+
+    List<BarChartGroupData> barGroups = [];
+    double maxCount = 5;
+    for (int i = 0; i < limitedSearches.length; i++) {
+      double count = double.tryParse(limitedSearches[i]['count'].toString()) ?? 0;
+      if (count > maxCount) maxCount = count;
+      barGroups.add(
+        BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: count,
+              color: Colors.purple,
+              width: 14,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      height: 280,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.purple.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.bar_chart_rounded, color: Colors.purple, size: 20),
+              SizedBox(width: 8),
+              Text('أبرز كلمات البحث التي بلا نتائج', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('تحليل طلبات البحث الأكثر تكراراً', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          const SizedBox(height: 12),
+          Expanded(
+            child: limitedSearches.isEmpty
+                ? const Center(child: Text('لا توجد بيانات بحث تحليلية حالياً', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                : BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceAround,
+                      maxY: maxCount * 1.2,
+                      barGroups: barGroups,
+                      titlesData: FlTitlesData(
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28)),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              int index = value.toInt();
+                              if (index >= 0 && index < limitedSearches.length) {
+                                String q = limitedSearches[index]['query'] ?? '';
+                                if (q.length > 6) q = '${q.substring(0, 5)}..';
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 6.0),
+                                  child: Text(q, style: const TextStyle(fontSize: 9)),
+                                );
+                              }
+                              return const Text('');
+                            },
+                          ),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      gridData: const FlGridData(show: false),
+                    ),
                   ),
           ),
         ],

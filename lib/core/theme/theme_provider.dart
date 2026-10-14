@@ -13,7 +13,7 @@ class ThemeProvider extends ChangeNotifier {
     _loadThemeFromPrefs();
   }
 
-  // جلب الثيم المحفوظ مسبقاً
+  // جلب الثيم المحفوظ مسبقاً (مع جعله داكناً كافتراضي إذا رغبت عبر تعديل الـ index)
   Future<void> _loadThemeFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final themeIndex = prefs.getInt('app_theme_mode') ?? 0;
@@ -48,24 +48,24 @@ class ThemeProvider extends ChangeNotifier {
           ),
         );
 
-      case AppThemeMode.banking:
+      case AppThemeMode.banking: // تم تحويله ليصبح الوضع الوردي/النسائي الراقي
         return ThemeData(
           brightness: Brightness.dark,
-          scaffoldBackgroundColor: AppColors.bankingBackground,
-          primaryColor: AppColors.bankingPrimary,
-          cardColor: AppColors.bankingSurface,
+          scaffoldBackgroundColor: AppColors.roseBackground,
+          primaryColor: AppColors.rosePrimary,
+          cardColor: AppColors.roseSurface,
           colorScheme: const ColorScheme.dark(
-            primary: AppColors.bankingPrimary,
-            surface: AppColors.bankingSurface,
+            primary: AppColors.rosePrimary,
+            surface: AppColors.roseSurface,
           ),
           textTheme: const TextTheme(
-            bodyLarge: TextStyle(color: AppColors.bankingTextPrimary),
-            bodyMedium: TextStyle(color: AppColors.bankingTextSecondary),
+            bodyLarge: TextStyle(color: AppColors.roseTextPrimary),
+            bodyMedium: TextStyle(color: AppColors.roseTextSecondary),
           ),
         );
 
       case AppThemeMode.light:
-      return ThemeData(
+        return ThemeData(
           brightness: Brightness.light,
           scaffoldBackgroundColor: AppColors.lightBackground,
           primaryColor: AppColors.lightPrimary,

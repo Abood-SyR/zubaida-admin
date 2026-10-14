@@ -186,7 +186,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       case 14: return const GroupsScreen(); // شاشة المجموعات
       case 5: return const CategoriesScreen(); // شاشة إدارة الفئات
       case 6: return const SearchManagementScreen(); // شاشة إدارة البحث
-      case 7: return const UiManagementScreen(); // شاشة إدارة الواجهات
+      case 7: return const UiManageScreen(); // شاشة إدارة الواجهات
       case 3: return const CurrentOrdersScreen();
       case 10: return const ProcessingOrdersScreen();
       case 11: return const ShippingOrdersScreen();
