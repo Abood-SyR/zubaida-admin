@@ -175,7 +175,7 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
     }
 
     final baseUrl = _apiService.dio.options.baseUrl;
-    final wsUri = '${baseUrl.replaceFirst('http', 'ws').replaceAll('/api', '')}/ws/admin/sessions/$tokenToTrack';
+    final wsUri = '${baseUrl.replaceFirst('http', 'ws').replaceAll('/api', '')}/auth/ws/admin/sessions/$tokenToTrack';
 
     _wsChannel = WebSocketChannel.connect(Uri.parse(wsUri));
 

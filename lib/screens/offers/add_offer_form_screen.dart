@@ -71,20 +71,24 @@ class _AddOfferFormScreenState extends State<AddOfferFormScreen> {
         _existingImageUrl = item['image_url']?.toString();
         
         var descData = item['description'];
-        if (descData is Map) _descriptionController.text = descData['ar'] ?? '';
-        else if (descData is String) _descriptionController.text = descData;
+        if (descData is Map) {
+          _descriptionController.text = descData['ar'] ?? '';
+        } else if (descData is String) _descriptionController.text = descData;
 
         var featData = item['features'];
-        if (featData is Map) _featuresController.text = featData['ar'] ?? '';
-        else if (featData is String) _featuresController.text = featData;
+        if (featData is Map) {
+          _featuresController.text = featData['ar'] ?? '';
+        } else if (featData is String) _featuresController.text = featData;
 
         var usageData = item['usages'];
-        if (usageData is Map) _usagesController.text = usageData['ar'] ?? '';
-        else if (usageData is String) _usagesController.text = usageData;
+        if (usageData is Map) {
+          _usagesController.text = usageData['ar'] ?? '';
+        } else if (usageData is String) _usagesController.text = usageData;
 
         var compData = item['compatibility'];
-        if (compData is Map) _compatibilityController.text = compData['ar'] ?? '';
-        else if (compData is String) _compatibilityController.text = compData;
+        if (compData is Map) {
+          _compatibilityController.text = compData['ar'] ?? '';
+        } else if (compData is String) _compatibilityController.text = compData;
       } else {
         if (item['discount_percentage'] != null) {
           _discountPercentageController.text = item['discount_percentage'].toString();

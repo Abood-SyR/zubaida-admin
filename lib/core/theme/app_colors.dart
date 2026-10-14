@@ -20,5 +20,5 @@ class AppColors {
   static const roseBackground = Color(0xFF1A1115); // خلفية داكنة ناعمة ومريحة للعين
   static const roseSurface = Color(0xFF2A1B22); // لون البطاقات والأسطح
   static const roseTextPrimary = Color(0xFFFF80AB); // نص وردي زهري مضيء وواضح
-  static const roseTextSecondary = Color(0xFFC29BACC); // نص ثانوي هادئ
+  static const roseTextSecondary = Color(0xffc29bacc); // نص ثانوي هادئ
 }

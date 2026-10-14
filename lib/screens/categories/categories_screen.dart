@@ -303,9 +303,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                   errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 40, color: Colors.grey),
                                 ),
                               )
-                            : Column(
+                            : const Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
+                                children: [
                                   Icon(Icons.add_a_photo_outlined, size: 32, color: Colors.grey),
                                   SizedBox(height: 8),
                                   Text('اضغط لاختيار صورة من الجهاز', style: TextStyle(fontSize: 12, color: Colors.grey)),
