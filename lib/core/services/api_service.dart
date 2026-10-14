@@ -25,7 +25,9 @@ class ApiService {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString('auth_token');
+          // البحث عن التوكين بكلا المفتاحين لضمان التقاطه بغض النظر عن طريقة حفظه
+          final token = prefs.getString('auth_token') ?? prefs.getString('access_token');
+          
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
