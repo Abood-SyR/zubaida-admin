@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../core/services/offer_service.dart';
 import 'add_offer_form_screen.dart';
 import '../products/product_details_screen.dart';
@@ -66,13 +68,66 @@ class _OffersScreenState extends State<OffersScreen> {
     });
   }
 
-  // الحذف في الخلفية بدون عرض Progress Bar يمنع المستخدم من المتابعة
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator.adaptive(strokeWidth: 3),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _hideLoadingDialog() {
+    if (Navigator.canPop(context)) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
   Future<void> _confirmDelete(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('حذف الحزمة'),
-        content: const Text('هل أنت متأكد من رغبتك في حذف هذه الحزمة؟'),
+        content: const Text('هل أنت متأكد من رغبتك في حذف هذه الحزمة نهائياً؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
           TextButton(
@@ -83,25 +138,27 @@ class _OffersScreenState extends State<OffersScreen> {
       ),
     );
 
-    if (confirm == true) {
-      // تنفيذ الحذف صامتاً في الخلفية وتحديث البيانات عند النجاح
-      OfferService.deleteOffer(id).then((success) {
-        if (success) {
-          _loadData(forceRefresh: true);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تم الحذف بنجاح'), backgroundColor: Colors.green),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('فشل في عملية الحذف'), backgroundColor: Colors.red),
-            );
-          }
+    if (confirm != true) return;
+
+    _showLoadingDialog('جاري حذف الحزمة...');
+
+    OfferService.deleteOffer(id).then((success) {
+      _hideLoadingDialog();
+      if (success) {
+        _loadData(forceRefresh: true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم الحذف بنجاح'), backgroundColor: Colors.green),
+          );
         }
-      });
-    }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فشل في عملية الحذف'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    });
   }
 
   void _navigateToProductDetails(String? productId) {
@@ -129,6 +186,7 @@ class _OffersScreenState extends State<OffersScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(bundleTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         content: SizedBox(
           width: 450,
@@ -141,7 +199,7 @@ class _OffersScreenState extends State<OffersScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('السعر النهائي:', style: TextStyle(color: Colors.grey)),
-                    Text('$price', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                    Text('$price ل.س', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
                   ],
                 ),
                 if (initialPrice != null) ...[
@@ -150,7 +208,7 @@ class _OffersScreenState extends State<OffersScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('السعر الأصلي:', style: TextStyle(color: Colors.grey)),
-                      Text('$initialPrice', style: const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey)),
+                      Text('$initialPrice ل.س', style: const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey)),
                     ],
                   ),
                 ],
@@ -163,7 +221,7 @@ class _OffersScreenState extends State<OffersScreen> {
                   ],
                 ),
                 const Divider(height: 28),
-                const Text('المنتجات الأساسية المشمولة (اضغط لعرض تفاصيل المنتج):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const Text('المنتجات المشمولة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 8),
                 products.isEmpty
                     ? const Padding(
@@ -191,7 +249,7 @@ class _OffersScreenState extends State<OffersScreen> {
                         }).toList(),
                       ),
                 const Divider(height: 28),
-                const Text('المنتج الهدية المجاني:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const Text('المنتج المجاني (هدية):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 8),
                 if (freeProductData != null && freeProductData is Map)
                   ListTile(
@@ -231,86 +289,140 @@ class _OffersScreenState extends State<OffersScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isDesktop = MediaQuery.of(context).size.width > 768;
+
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: theme.dividerColor.withOpacity(0.08)),
-                ),
-                child: FutureBuilder<List<dynamic>>(
-                  future: _bundlesFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    } else if (snapshot.hasError) {
-                      return Center(
-                        child: Text('خطأ في الاتصال بالسيرفر: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
-                      );
-                    } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(child: Text('لا توجد عروض حزم مسجلة حالياً', style: TextStyle(color: Colors.grey)));
-                    }
-
-                    final bundles = snapshot.data!;
-                    return ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: bundles.length,
-                      itemBuilder: (context, index) {
-                        final bundle = bundles[index];
-                        final bundleId = bundle['id']?.toString() ?? '';
-                        String bundleTitle = _extractName(bundle['title']);
-                        final price = bundle['final_price'] ?? bundle['total_price'] ?? 0.0;
-                        final productsCount = (bundle['products'] as List?)?.length ?? 0;
-
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                          child: ListTile(
-                            onTap: () => _showBundleDetails(bundle),
-                            title: Text(bundleTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('السعر: $price | عدد المنتجات: $productsCount'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                                  onPressed: () async {
-                                    final result = await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => AddOfferFormScreen(
-                                          isBundle: true,
-                                          offerData: bundle,
-                                        ),
-                                      ),
-                                    );
-                                    if (result == true) _loadData(forceRefresh: true);
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  onPressed: () => _confirmDelete(bundleId),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: FutureBuilder<List<dynamic>>(
+        future: _bundlesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return ListView.builder(
+              padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
+              itemCount: 4,
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Shimmer.fromColors(
+                  baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                  highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+            );
+          } else if (snapshot.hasError) {
+            return Center(
+              child: Text('خطأ في الاتصال بالسيرفر: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+            );
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.local_offer_outlined, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  const Text('لا توجد عروض حزم مسجلة حالياً', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                ],
+              ),
+            );
+          }
+
+          final bundles = snapshot.data!;
+          return ListView.builder(
+            padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
+            itemCount: bundles.length,
+            itemBuilder: (context, index) {
+              final bundle = bundles[index];
+              final bundleId = bundle['id']?.toString() ?? '';
+              String bundleTitle = _extractName(bundle['title']);
+              final price = bundle['final_price'] ?? bundle['total_price'] ?? 0.0;
+              final productsCount = (bundle['products'] as List?)?.length ?? 0;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Slidable(
+                    endActionPane: ActionPane(
+                      motion: const ScrollMotion(),
+                      extentRatio: 0.3,
+                      children: [
+                        SlidableAction(
+                          onPressed: (_) async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => AddOfferFormScreen(
+                                  isBundle: true,
+                                  offerData: bundle,
+                                ),
+                              ),
+                            );
+                            if (result == true) _loadData(forceRefresh: true);
+                          },
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: theme.colorScheme.primary,
+                          icon: Icons.edit_outlined,
+                        ),
+                        SlidableAction(
+                          onPressed: (_) => _confirmDelete(bundleId),
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.redAccent,
+                          icon: Icons.delete_outline_rounded,
+                        ),
+                      ],
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.withOpacity(0.08)),
+                      ),
+                      child: ListTile(
+                        onTap: () => _showBundleDetails(bundle),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        leading: CircleAvatar(
+                          backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                          child: Icon(Icons.local_offer_rounded, color: theme.colorScheme.primary, size: 20),
+                        ),
+                        title: Text(
+                          bundleTitle,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Text(
+                                'السعر: $price ل.س',
+                                style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600, fontSize: 12),
+                              ),
+                              const Text('  •  ', style: TextStyle(color: Colors.grey)),
+                              Text(
+                                'عدد المنتجات: $productsCount',
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: Colors.white,
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -323,7 +435,7 @@ class _OffersScreenState extends State<OffersScreen> {
           if (result == true) _loadData(forceRefresh: true);
         },
         icon: const Icon(Icons.library_add_rounded),
-        label: const Text('إضافة حزمة'),
+        label: const Text('إضافة حزمة جديدة', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }

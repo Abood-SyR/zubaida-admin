@@ -5,35 +5,131 @@ import 'package:shimmer/shimmer.dart';
 import 'dart:convert';
 import 'package:dashboard/core/services/api_service.dart';
 
-// شاشة أرشيف التقارير الكاملة ("عرض الكل")
+// استيراد شاشة قراءة التقرير التحليلي للذكاء الاصطناعي
+import 'analytics/ai_report_reader_screen.dart';
+
+// --- دالة عامة موحدة لفتح التقارير (خارج الكلاسات لتجنب أخطاء الـ static) ---
+void _openReport(BuildContext context, Map<String, dynamic> report) {
+  final metrics = report['metrics'] is Map
+      ? report['metrics'] as Map<String, dynamic>
+      : {};
+
+  final String? aiReportText = metrics['report'] ??
+      metrics['report_text'] ??
+      metrics['summary'] ??
+      metrics['ai_analysis'] ??
+      report['report'] ??
+      report['report_text'] ??
+      report['summary'];
+
+  // إذا كان التقرير من نوع search_insights أو يحتوي على نص ذكاء اصطناعي
+  if (report['report_type'] == 'search_insights' || aiReportText != null) {
+    String finalReportContent = '';
+    if (aiReportText != null && aiReportText.isNotEmpty) {
+      finalReportContent = aiReportText;
+    } else {
+      final topItems = metrics['top_searched_items'] is List ? metrics['top_searched_items'] as List : [];
+      final totalQueries = metrics['total_analyzed_queries'] ?? 0;
+      final failedVolume = metrics['total_failed_searches_volume'] ?? 0;
+      final periodName = report['period_name'] ?? 'تقرير ذكاء البحث';
+
+      StringBuffer sb = StringBuffer();
+      sb.writeln('📋 $periodName');
+      sb.writeln('==================================================');
+      sb.writeln('• إجمالي عمليات البحث والتحليل: $totalQueries');
+      sb.writeln('• حجم عمليات البحث التي لم تسفر عن نتائج مباشرة: $failedVolume');
+      sb.writeln('\n🔍 أبرز كلمات وطلبات البحث المسجلة من الزبائن:');
+
+      if (topItems.isEmpty) {
+        sb.writeln('- لا توجد طلبات بحث مسجلة في هذه الفترة.');
+      } else {
+        for (int i = 0; i < topItems.length; i++) {
+          final item = topItems[i];
+          final query = item['query'] ?? 'غير معروف';
+          final count = item['count'] ?? 1;
+          sb.writeln('${i + 1}. "$query" (تكرار الطلب: $count مرات)');
+        }
+      }
+
+      sb.writeln('\n==================================================');
+      sb.writeln('💡 توصيات واستراتيجيات مقترحة للمتجر:');
+      sb.writeln('1. توفير الأصناف والمنتجات الأكثر بحثاً والتي لم تجد نتائج لتقليل الفاقد من العملاء.');
+      sb.writeln('2. تحسين الكلمات الدلالية وأسماء المنتجات الحالية لتتوافق مع المصطلحات التي يستخدمها الزبائن في البحث.');
+      sb.writeln('3. دراسة إضافة أقسام وعروض مخصصة بناءً على توجهات ونشاط عمليات البحث الأخيرة.');
+      
+      finalReportContent = sb.toString();
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AiReportReaderScreen(
+          reportItem: {
+            'id': report['id'] ?? '',
+            'date': report['created_at'] ?? report['start_date'] ?? '',
+            'model_used': metrics['model_used'] ?? report['model_used'] ?? 'Gemini AI',
+            'cleared_count': metrics['total_analyzed_queries'] ?? metrics['cleared_count'] ?? 0,
+            'report': finalReportContent,
+          },
+          onDelete: () {},
+        ),
+      ),
+    );
+  } else {
+    // للتقارير الشهرية والأسبوعية والدورية الأخرى، يتم فتح شاشة تفاصيل الإحصائيات والأرقام
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (context) => ReportDetailScreen(report: report)),
+    );
+  }
+}
+
 class AllReportsScreen extends StatelessWidget {
   final List<dynamic> reports;
   const AllReportsScreen({super.key, required this.reports});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('أرشيف التقارير الكامل'), centerTitle: true),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar:
+          AppBar(title: const Text('أرشيف التقارير الكامل'), centerTitle: true),
       body: reports.isEmpty
-          ? const Center(child: Text('لا توجد تقارير محفوظة حالياً'))
+          ? const Center(
+              child: Text('لا توجد تقارير محفوظة حالياً',
+                  style: TextStyle(color: Colors.grey)))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: reports.length,
               itemBuilder: (context, index) {
                 final report = reports[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: ListTile(
-                    title: Text(report['period_name'] ?? 'تقرير دوري', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('النوع: ${report['report_type']} | التاريخ: ${report['created_at']?.toString().substring(0, 10)}'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => ReportDetailScreen(report: report)),
-                      );
-                    },
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.withOpacity(0.08)),
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
+                      title: Text(report['period_name'] ?? 'تقرير دوري',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14)),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                            'النوع: ${report['report_type']}  •  التاريخ: ${report['created_at']?.toString().substring(0, 10)}',
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey)),
+                      ),
+                      trailing:
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                      onTap: () => _openReport(context, report),
+                    ),
                   ),
                 );
               },
@@ -42,40 +138,90 @@ class AllReportsScreen extends StatelessWidget {
   }
 }
 
-// شاشة تفاصيل التقرير المحدد
 class ReportDetailScreen extends StatelessWidget {
   final Map<String, dynamic> report;
   const ReportDetailScreen({super.key, required this.report});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final metrics = report['metrics'] ?? {};
+
     return Scaffold(
-      appBar: AppBar(title: Text(report['period_name'] ?? 'تفاصيل التقرير'), centerTitle: true),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+          title: Text(report['period_name'] ?? 'تفاصيل التقرير'),
+          centerTitle: true),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('نوع التقرير: ${report['report_type']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text('فترة التقرير: من ${report['start_date']?.toString().substring(0, 10)} إلى ${report['end_date']?.toString().substring(0, 10)}', style: const TextStyle(color: Colors.grey)),
-            const Divider(height: 24),
-            const Text('الإحصائيات والقياسات المسجلة:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.withOpacity(0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('نوع التقرير: ${report['report_type']}',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(
+                      'فترة التقرير: من ${report['start_date']?.toString().substring(0, 10)} إلى ${report['end_date']?.toString().substring(0, 10)}',
+                      style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('الإحصائيات والقياسات المسجلة:',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            ...metrics.entries.map((e) {
-              if (e.key == 'status_breakdown') return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(e.key, style: const TextStyle(fontWeight: FontWeight.w500)),
-                    Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                  ],
-                ),
-              );
-            }),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.withOpacity(0.08)),
+              ),
+              child: Column(
+                children: metrics.entries.map<Widget>((e) {
+                  if (e.key == 'status_breakdown' || e.key == 'report')
+                    return const SizedBox.shrink();
+
+                  String displayValue = e.value.toString();
+                  if (e.value is List) {
+                    final list = e.value as List;
+                    displayValue = '${list.length} عناصر مسجلة';
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                            child: Text(e.key,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 13))),
+                        const SizedBox(width: 12),
+                        Text(displayValue,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                                fontSize: 14)),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           ],
         ),
       ),
@@ -105,7 +251,7 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
   List<dynamic> _topSearchedItems = [];
 
   final ApiService _apiService = ApiService();
-  
+
   static const String _cacheKeyDashboard = 'cached_dashboard_data';
   static const String _cacheKeyReports = 'cached_reports_data';
   static const String _cacheKeyInsights = 'cached_insights_data';
@@ -125,7 +271,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     if (cachedDashboard != null && cachedReports != null) {
       try {
         final data = jsonDecode(cachedDashboard);
-        final insights = cachedInsights != null ? jsonDecode(cachedInsights) : {};
+        final insights =
+            cachedInsights != null ? jsonDecode(cachedInsights) : {};
         setState(() {
           _revenueTimeline = data['revenue_timeline'] ?? [];
           _statsData = data['overview'] ?? {};
@@ -153,13 +300,16 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
     try {
       final response = await _apiService.dio.get('/analytics/dashboard-pro');
-      final reportsResponse = await _apiService.dio.get('/analytics/periodic-reports/history');
-      final insightsResponse = await _apiService.dio.get('/analytics/offers-groups-insights');
+      final reportsResponse =
+          await _apiService.dio.get('/analytics/periodic-reports/history');
+      final insightsResponse =
+          await _apiService.dio.get('/analytics/offers-groups-insights');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_cacheKeyDashboard, jsonEncode(response.data));
       await prefs.setString(_cacheKeyReports, jsonEncode(reportsResponse.data));
-      await prefs.setString(_cacheKeyInsights, jsonEncode(insightsResponse.data));
+      await prefs.setString(
+          _cacheKeyInsights, jsonEncode(insightsResponse.data));
 
       setState(() {
         final data = response.data ?? {};
@@ -231,29 +381,39 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                                   TextButton.icon(
                                     onPressed: _fetchAnalyticsData,
                                     icon: const Icon(Icons.refresh, size: 16),
-                                    label: const Text('تحديث البيانات', style: TextStyle(fontSize: 12)),
+                                    label: const Text('تحديث البيانات',
+                                        style: TextStyle(fontSize: 12)),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 'متابعة أداء النظام، المبيعات، والعروض الحية',
-                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.grey[600]),
                               ),
                             ],
                           ),
                         ),
                         ToggleButtons(
-                          isSelected: [_selectedReportType == 'weekly', _selectedReportType == 'monthly'],
+                          isSelected: [
+                            _selectedReportType == 'weekly',
+                            _selectedReportType == 'monthly'
+                          ],
                           onPressed: (index) {
                             setState(() {
-                              _selectedReportType = index == 0 ? 'weekly' : 'monthly';
+                              _selectedReportType =
+                                  index == 0 ? 'weekly' : 'monthly';
                             });
                           },
                           borderRadius: BorderRadius.circular(10),
                           children: const [
-                            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('أسبوعي')),
-                            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('شهري')),
+                            Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('أسبوعي')),
+                            Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('شهري')),
                           ],
                         ),
                       ],
@@ -269,12 +429,42 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       childAspectRatio: 1.5,
                       children: [
-                        _buildStatCard(context, 'المستخدمين المسجلين', '${_statsData['total_users'] ?? 0} مستخدم', Icons.people_outline, Colors.teal),
-                        _buildStatCard(context, 'إجمالي المنتجات', '${_statsData['total_products'] ?? 0} منتج', Icons.inventory_2_outlined, Colors.indigo),
-                        _buildStatCard(context, 'الطلبات الكلية', '${_statsData['total_orders'] ?? 0} طلب', Icons.shopping_bag_outlined, Colors.orange),
-                        _buildStatCard(context, 'إجمالي الإيرادات', '${_statsData['total_revenue'] ?? 0} ل.س', Icons.trending_up, Colors.green),
-                        _buildStatCard(context, 'صافي الأرباح', '${_statsData['total_profit'] ?? 0} ل.س', Icons.account_balance_wallet_outlined, Colors.blue),
-                        _buildStatCard(context, 'متوسط السلة', '${_statsData['average_order_value'] ?? 0} ل.س', Icons.analytics_outlined, Colors.purple),
+                        _buildStatCard(
+                            context,
+                            'المستخدمين المسجلين',
+                            '${_statsData['total_users'] ?? 0} مستخدم',
+                            Icons.people_outline,
+                            Colors.teal),
+                        _buildStatCard(
+                            context,
+                            'إجمالي المنتجات',
+                            '${_statsData['total_products'] ?? 0} منتج',
+                            Icons.inventory_2_outlined,
+                            Colors.indigo),
+                        _buildStatCard(
+                            context,
+                            'الطلبات الكلية',
+                            '${_statsData['total_orders'] ?? 0} طلب',
+                            Icons.shopping_bag_outlined,
+                            Colors.orange),
+                        _buildStatCard(
+                            context,
+                            'إجمالي الإيرادات',
+                            '${_statsData['total_revenue'] ?? 0} ل.س',
+                            Icons.trending_up,
+                            Colors.green),
+                        _buildStatCard(
+                            context,
+                            'صافي الأرباح',
+                            '${_statsData['total_profit'] ?? 0} ل.س',
+                            Icons.account_balance_wallet_outlined,
+                            Colors.blue),
+                        _buildStatCard(
+                            context,
+                            'متوسط السلة',
+                            '${_statsData['average_order_value'] ?? 0} ل.س',
+                            Icons.analytics_outlined,
+                            Colors.purple),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -297,14 +487,17 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
                     const SizedBox(height: 24),
 
-                    // 3. الرسم البياني للإيرادات وتوزيع طرق الدفع (مخطط دائري تفاعلي)
+                    // 3. الرسم البياني للإيرادات وتوزيع طرق الدفع
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(flex: 3, child: _buildRevenueLineChart(context)),
+                          Expanded(
+                              flex: 3, child: _buildRevenueLineChart(context)),
                           const SizedBox(width: 24),
-                          Expanded(flex: 2, child: _buildPaymentMethodsPieChart(context)),
+                          Expanded(
+                              flex: 2,
+                              child: _buildPaymentMethodsPieChart(context)),
                         ],
                       )
                     else ...[
@@ -320,9 +513,12 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(flex: 3, child: _buildTopProductsCard(context)),
+                          Expanded(
+                              flex: 3, child: _buildTopProductsCard(context)),
                           const SizedBox(width: 24),
-                          Expanded(flex: 2, child: _buildCategoriesPerformanceCard(context)),
+                          Expanded(
+                              flex: 2,
+                              child: _buildCategoriesPerformanceCard(context)),
                         ],
                       )
                     else ...[
@@ -333,22 +529,28 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
                     const SizedBox(height: 24),
 
-                    // 5. تنبيهات المخزون، تقارير البحث الذكية (مخطط أعمدة)، وأرشيف التقارير
+                    // 5. تنبيهات المخزون، كلمات البحث بدون نتائج، وأرشيف التقارير
                     if (isDesktop)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(flex: 2, child: _buildLowStockAlertCard(context)),
+                          Expanded(
+                              flex: 2, child: _buildLowStockAlertCard(context)),
                           const SizedBox(width: 24),
-                          Expanded(flex: 2, child: _buildSearchInsightsBarChart(context)),
+                          Expanded(
+                              flex: 2,
+                              child: _buildSearchInsightsCard(context)),
                           const SizedBox(width: 24),
-                          Expanded(flex: 3, child: _buildSavedPeriodicReportsSection(context)),
+                          Expanded(
+                              flex: 3,
+                              child:
+                                  _buildSavedPeriodicReportsSection(context)),
                         ],
                       )
                     else ...[
                       _buildLowStockAlertCard(context),
                       const SizedBox(height: 20),
-                      _buildSearchInsightsBarChart(context),
+                      _buildSearchInsightsCard(context),
                       const SizedBox(height: 20),
                       _buildSavedPeriodicReportsSection(context),
                     ],
@@ -359,7 +561,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
-  Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(BuildContext context, String title, String value,
+      IconData icon, Color color) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
@@ -376,7 +579,9 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
           const Spacer(),
           Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -399,13 +604,16 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
             children: [
               Icon(Icons.local_offer_outlined, color: Colors.orange, size: 20),
               SizedBox(width: 8),
-              Text('أداء العروض الأكثر طلباً', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              Text('أداء العروض الأكثر طلباً',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 12),
           Expanded(
             child: _topOffers.isEmpty
-                ? const Center(child: Text('لا توجد مبيعات للعروض حالياً', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                ? const Center(
+                    child: Text('لا توجد مبيعات للعروض حالياً',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
                 : ListView.builder(
                     itemCount: _topOffers.length > 5 ? 5 : _topOffers.length,
                     itemBuilder: (context, index) {
@@ -415,10 +623,21 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(child: Text(_getLocalizedText(offer['name']), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                            Text('${offer['units_sold']} مبيع', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            Expanded(
+                                child: Text(_getLocalizedText(offer['name']),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis)),
+                            Text('${offer['units_sold']} مبيع',
+                                style: const TextStyle(
+                                    fontSize: 11, color: Colors.grey)),
                             const SizedBox(width: 8),
-                            Text('${offer['total_revenue']} ل.س', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
+                            Text('${offer['total_revenue']} ل.س',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green)),
                           ],
                         ),
                       );
@@ -447,13 +666,16 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
             children: [
               Icon(Icons.group_work_outlined, color: Colors.purple, size: 20),
               SizedBox(width: 8),
-              Text('أداء المجموعات الأكثر طلباً', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              Text('أداء المجموعات الأكثر طلباً',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 12),
           Expanded(
             child: _topGroups.isEmpty
-                ? const Center(child: Text('لا توجد مبيعات للمجموعات حالياً', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                ? const Center(
+                    child: Text('لا توجد مبيعات للمجموعات حالياً',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
                 : ListView.builder(
                     itemCount: _topGroups.length > 5 ? 5 : _topGroups.length,
                     itemBuilder: (context, index) {
@@ -463,10 +685,21 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(child: Text(_getLocalizedText(group['name']), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                            Text('${group['units_sold']} مبيع', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            Expanded(
+                                child: Text(_getLocalizedText(group['name']),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis)),
+                            Text('${group['units_sold']} مبيع',
+                                style: const TextStyle(
+                                    fontSize: 11, color: Colors.grey)),
                             const SizedBox(width: 8),
-                            Text('${group['total_revenue']} ل.س', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
+                            Text('${group['total_revenue']} ل.س',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green)),
                           ],
                         ),
                       );
@@ -485,7 +718,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
 
     for (int i = 0; i < _revenueTimeline.length; i++) {
       final item = _revenueTimeline[i];
-      final revenue = double.tryParse(item['revenue']?.toString() ?? '0') ?? 0.0;
+      final revenue =
+          double.tryParse(item['revenue']?.toString() ?? '0') ?? 0.0;
       if (revenue > maxRevenue) maxRevenue = revenue;
       spots.add(FlSpot(i.toDouble(), revenue));
     }
@@ -505,28 +739,36 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('منحنى تدفق الإيرادات اليومية', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          const Text('منحنى تدفق الإيرادات اليومية',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('تطور الإيرادات خلال الأيام الأخيرة', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text('تطور الإيرادات خلال الأيام الأخيرة',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
           const SizedBox(height: 16),
           Expanded(
             child: LineChart(
               LineChartData(
                 minX: 0,
-                maxX: _revenueTimeline.isNotEmpty ? (_revenueTimeline.length - 1).toDouble() : 1.0,
+                maxX: _revenueTimeline.isNotEmpty
+                    ? (_revenueTimeline.length - 1).toDouble()
+                    : 1.0,
                 minY: 0,
                 maxY: maxRevenue > 0 ? maxRevenue * 1.2 : 1000.0,
                 gridData: const FlGridData(show: true, drawVerticalLine: false),
                 titlesData: FlTitlesData(
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 60,
                       getTitlesWidget: (value, meta) {
                         return Text(
-                          value >= 1000 ? '${(value / 1000).toStringAsFixed(0)}k' : value.toStringAsFixed(0),
+                          value >= 1000
+                              ? '${(value / 1000).toStringAsFixed(0)}k'
+                              : value.toStringAsFixed(0),
                           style: const TextStyle(fontSize: 9),
                         );
                       },
@@ -539,10 +781,12 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                       getTitlesWidget: (value, meta) {
                         int index = value.toInt();
                         if (index >= 0 && index < _revenueTimeline.length) {
-                          String dateStr = _revenueTimeline[index]['date'] ?? '';
+                          String dateStr =
+                              _revenueTimeline[index]['date'] ?? '';
                           return Padding(
                             padding: const EdgeInsets.only(top: 8.0),
-                            child: Text(dateStr, style: const TextStyle(fontSize: 9)),
+                            child: Text(dateStr,
+                                style: const TextStyle(fontSize: 9)),
                           );
                         }
                         return const Text('');
@@ -572,10 +816,15 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
-  // مخطط دائري تفاعلي جميل (Pie Chart) لتوزيع طرق الدفع
   Widget _buildPaymentMethodsPieChart(BuildContext context) {
     final theme = Theme.of(context);
-    final colorsList = [Colors.blue, Colors.purple, Colors.orange, Colors.teal, Colors.pink];
+    final colorsList = [
+      Colors.blue,
+      Colors.purple,
+      Colors.orange,
+      Colors.teal,
+      Colors.pink
+    ];
 
     int i = 0;
     List<PieChartSectionData> sections = _paymentMethods.entries.map((entry) {
@@ -587,7 +836,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
         value: val > 0 ? val : 1,
         title: '${entry.value}',
         radius: 50,
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+        titleStyle: const TextStyle(
+            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
       );
     }).toList();
 
@@ -602,13 +852,17 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('توزيع طرق الدفع', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          const Text('توزيع طرق الدفع',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('نسبة استخدام طرق الدفع المختلفة', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text('نسبة استخدام طرق الدفع المختلفة',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
           const SizedBox(height: 12),
           Expanded(
             child: _paymentMethods.isEmpty
-                ? const Center(child: Text('لا توجد بيانات دفع مسجلة', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                ? const Center(
+                    child: Text('لا توجد بيانات دفع مسجلة',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
                 : Row(
                     children: [
                       Expanded(
@@ -629,9 +883,15 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                             padding: const EdgeInsets.only(bottom: 6.0),
                             child: Row(
                               children: [
-                                Container(width: 10, height: 10, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.purple)),
+                                Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.purple)),
                                 const SizedBox(width: 6),
-                                Text('${e.key} (${e.value})', style: const TextStyle(fontSize: 11)),
+                                Text('${e.key} (${e.value})',
+                                    style: const TextStyle(fontSize: 11)),
                               ],
                             ),
                           );
@@ -645,29 +905,14 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
     );
   }
 
-  // مخطط أعمدة احترافي وجذاب (Bar Chart) لكلمات البحث التي بلا نتائج المحفوظة بتقرير البحث
-  Widget _buildSearchInsightsBarChart(BuildContext context) {
+  Widget _buildSearchInsightsCard(BuildContext context) {
     final theme = Theme.of(context);
     final limitedSearches = _topSearchedItems.take(5).toList();
 
-    List<BarChartGroupData> barGroups = [];
-    double maxCount = 5;
-    for (int i = 0; i < limitedSearches.length; i++) {
-      double count = double.tryParse(limitedSearches[i]['count'].toString()) ?? 0;
-      if (count > maxCount) maxCount = count;
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: count,
-              color: Colors.purple,
-              width: 14,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ],
-        ),
-      );
+    double maxCount = 1;
+    for (var item in limitedSearches) {
+      double c = double.tryParse(item['count']?.toString() ?? '1') ?? 1;
+      if (c > maxCount) maxCount = c;
     }
 
     return Container(
@@ -683,47 +928,81 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.bar_chart_rounded, color: Colors.purple, size: 20),
+              Icon(Icons.search_off_rounded, color: Colors.purple, size: 20),
               SizedBox(width: 8),
-              Text('أبرز كلمات البحث التي بلا نتائج', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              Text('أبرز كلمات البحث التي بلا نتائج',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
-          Text('تحليل طلبات البحث الأكثر تكراراً', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text('طلبات البحث الأكثر تكراراً المفقودة من المتجر',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
           const SizedBox(height: 12),
           Expanded(
             child: limitedSearches.isEmpty
-                ? const Center(child: Text('لا توجد بيانات بحث تحليلية حالياً', style: TextStyle(fontSize: 12, color: Colors.grey)))
-                : BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      maxY: maxCount * 1.2,
-                      barGroups: barGroups,
-                      titlesData: FlTitlesData(
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28)),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (value, meta) {
-                              int index = value.toInt();
-                              if (index >= 0 && index < limitedSearches.length) {
-                                String q = limitedSearches[index]['query'] ?? '';
-                                if (q.length > 6) q = '${q.substring(0, 5)}..';
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 6.0),
-                                  child: Text(q, style: const TextStyle(fontSize: 9)),
-                                );
-                              }
-                              return const Text('');
-                            },
-                          ),
+                ? const Center(
+                    child: Text('لا توجد بيانات بحث تحليلي حالياً',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
+                : ListView.builder(
+                    itemCount: limitedSearches.length,
+                    itemBuilder: (context, index) {
+                      final item = limitedSearches[index];
+                      final queryStr = item['query']?.toString() ?? 'غير محدد';
+                      final countVal =
+                          int.tryParse(item['count']?.toString() ?? '1') ?? 1;
+                      final progress = (countVal / maxCount).clamp(0.05, 1.0);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    queryStr,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '$countVal بحث',
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.purple,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 6,
+                                backgroundColor:
+                                    Colors.purple.withOpacity(0.06),
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                    Colors.purple),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      gridData: const FlGridData(show: false),
-                    ),
+                      );
+                    },
                   ),
           ),
         ],
@@ -746,13 +1025,17 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('المنتجات الأكثر مبيعاً وإيراداً', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          const Text('المنتجات الأكثر مبيعاً وإيراداً',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('أعلى المنتجات تحقيقيًا للمبيعات (أقصى 10)', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text('أعلى المنتجات تحقيقيًا للمبيعات (أقصى 10)',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
           const SizedBox(height: 12),
           Expanded(
             child: limitedProducts.isEmpty
-                ? const Center(child: Text('لا توجد مبيعات مسجلة للمنتجات بعد', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                ? const Center(
+                    child: Text('لا توجد مبيعات مسجلة للمنتجات بعد',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
                 : ListView.builder(
                     itemCount: limitedProducts.length,
                     shrinkWrap: true,
@@ -765,10 +1048,21 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(child: Text(productName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                            Text('${p['sold_count']} مبيعات', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                            Expanded(
+                                child: Text(productName,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis)),
+                            Text('${p['sold_count']} مبيعات',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey[600])),
                             const SizedBox(width: 12),
-                            Text('${p['total_product_revenue']} ل.س', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                            Text('${p['total_product_revenue']} ل.س',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.primary)),
                           ],
                         ),
                       );
@@ -795,11 +1089,14 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('أداء الأقسام الرئيسية', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          const Text('أداء الأقسام الرئيسية',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Expanded(
             child: limitedCategories.isEmpty
-                ? const Center(child: Text('لا توجد أقسام مسجلة', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                ? const Center(
+                    child: Text('لا توجد أقسام مسجلة',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
                 : ListView.builder(
                     itemCount: limitedCategories.length,
                     shrinkWrap: true,
@@ -816,12 +1113,20 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(catName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                Text('$productsCount منتج', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                                Text(catName,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600)),
+                                Text('$productsCount منتج',
+                                    style: TextStyle(
+                                        fontSize: 11, color: Colors.grey[600])),
                               ],
                             ),
                             const SizedBox(height: 4),
-                            LinearProgressIndicator(value: productsCount > 0 ? 0.6 : 0.0, minHeight: 5, borderRadius: BorderRadius.circular(4)),
+                            LinearProgressIndicator(
+                                value: productsCount > 0 ? 0.6 : 0.0,
+                                minHeight: 5,
+                                borderRadius: BorderRadius.circular(4)),
                           ],
                         ),
                       );
@@ -852,15 +1157,22 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
               SizedBox(width: 8),
-              Text('تنبيهات المخزون المنخفض', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red)),
+              Text('تنبيهات المخزون المنخفض',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red)),
             ],
           ),
           const SizedBox(height: 4),
-          Text('منتجات اقتربت على النفاد (<= 5 قطع)', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text('منتجات اقتربت على النفاد (<= 5 قطع)',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
           const SizedBox(height: 12),
           Expanded(
             child: limitedLowStock.isEmpty
-                ? const Center(child: Text('المخزون بحالة ممتازة ولا توجد نواقص', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                ? const Center(
+                    child: Text('المخزون بحالة ممتازة ولا توجد نواقص',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
                 : ListView.builder(
                     itemCount: limitedLowStock.length,
                     shrinkWrap: true,
@@ -870,13 +1182,19 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 6),
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.red.withOpacity(0.05), borderRadius: BorderRadius.circular(8)),
+                        decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8)),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(_getLocalizedText(item['name']), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text(_getLocalizedText(item['name']),
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.bold)),
                             Chip(
-                              label: Text('${item['stock_quantity']} متبقي', style: const TextStyle(fontSize: 10, color: Colors.red)),
+                              label: Text('${item['stock_quantity']} متبقي',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: Colors.red)),
                               backgroundColor: Colors.red.withOpacity(0.1),
                               visualDensity: VisualDensity.compact,
                             ),
@@ -909,7 +1227,8 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('أرشيف التقارير', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              const Text('أرشيف التقارير',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
               Row(
                 children: [
                   TextButton.icon(
@@ -921,25 +1240,32 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                         );
                         _fetchAnalyticsData();
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم توليد التقرير بنجاح وحفظه في الأرشيف')),
+                          const SnackBar(
+                              content: Text(
+                                  'تم توليد التقرير بنجاح وحفظه في الأرشيف')),
                         );
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('خطأ أثناء توليد التقرير')),
+                          const SnackBar(
+                              content: Text('خطأ أثناء توليد التقرير')),
                         );
                       }
                     },
                     icon: const Icon(Icons.add, size: 14),
-                    label: const Text('توليد تقرير', style: TextStyle(fontSize: 11)),
+                    label: const Text('توليد تقرير',
+                        style: TextStyle(fontSize: 11)),
                   ),
                   TextButton(
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => AllReportsScreen(reports: _savedReports)),
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                AllReportsScreen(reports: _savedReports)),
                       );
                     },
-                    child: const Text('عرض الكل', style: TextStyle(fontSize: 12)),
+                    child:
+                        const Text('عرض الكل', style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
@@ -948,7 +1274,9 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
           const SizedBox(height: 8),
           Expanded(
             child: limitedReports.isEmpty
-                ? const Center(child: Text('لا توجد تقارير محفوظة حالياً', style: TextStyle(fontSize: 12, color: Colors.grey)))
+                ? const Center(
+                    child: Text('لا توجد تقارير محفوظة حالياً',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)))
                 : ListView.builder(
                     itemCount: limitedReports.length,
                     shrinkWrap: true,
@@ -956,16 +1284,12 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
                     itemBuilder: (context, index) {
                       final report = limitedReports[index];
                       return InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => ReportDetailScreen(report: report)),
-                          );
-                        },
+                        onTap: () => _openReport(context, report),
                         child: _buildReportHistoryItem(
                           report['period_name'] ?? 'تقرير دوري',
                           'مكتمل الأرشيف (${report['report_type'] ?? ''})',
-                          report['created_at']?.toString().substring(0, 10) ?? '',
+                          report['created_at']?.toString().substring(0, 10) ??
+                              '',
                         ),
                       );
                     },
@@ -990,9 +1314,12 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              Text(title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 12)),
               const SizedBox(height: 1),
-              Text(subtitle, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+              Text(subtitle,
+                  style: TextStyle(fontSize: 10, color: Colors.grey[600])),
             ],
           ),
           Text(date, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
@@ -1019,10 +1346,19 @@ class _HomeAnalyticsScreenState extends State<HomeAnalyticsScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               childAspectRatio: 1.5,
-              children: List.generate(6, (index) => Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)))),
+              children: List.generate(
+                  6,
+                  (index) => Container(
+                      decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16)))),
             ),
             const SizedBox(height: 24),
-            Container(height: 300, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16))),
+            Container(
+                height: 300,
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16))),
           ],
         ),
       ),

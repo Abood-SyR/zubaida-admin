@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:convert';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../core/services/api_service.dart';
 
 class QrSessionsScreen extends StatefulWidget {
@@ -49,6 +51,59 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
     super.dispose();
   }
 
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator.adaptive(strokeWidth: 3),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _hideLoadingDialog() {
+    if (Navigator.canPop(context)) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
   Future<void> _fetchSessions() async {
     setState(() => _isLoading = true);
     try {
@@ -61,6 +116,7 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
       }
     } catch (e) {
       setState(() => _isLoading = false);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('فشل جلب الجلسات (تأكد من صلاحيات الأدمن)'), backgroundColor: Colors.red),
       );
@@ -109,13 +165,13 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
       return;
     }
 
+    _showLoadingDialog('جاري توليد الحساب وجلسة QR...');
+
     try {
-      // 1. توليد بيانات وهمية فريدة للمستخدم (إيميل وكلمة مرور) لتجاوز حماية 401 في السيرفر
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fakePhone = '9${timestamp.toString().substring(timestamp.toString().length - 9)}';
       final fakePassword = 'Pass_$timestamp!';
 
-      // 2. إنشاء المستخدم الوهمي في جدول الـ User عبر نقطة التسجيل بالسيرفر
       final registerRes = await _apiService.dio.post('/auth/register', data: {
         'phone_number': fakePhone,
         'username': _nameController.text.trim(),
@@ -127,7 +183,6 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
         throw Exception('فشل إنشاء الحساب الوهمي');
       }
 
-      // 3. توليد جلسة QR الرسمية في جدول الـ EditorSession للحصول على الـ token والتحكم والصلاحيات
       final response = await _apiService.dio.post('/auth/admin/sessions/generate', data: {
         'session_name': _nameController.text.trim(),
         'expires_in_minutes': differenceInMinutes,
@@ -142,11 +197,12 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
         'allowed_order_statuses': allowedStatuses,
       });
 
+      _hideLoadingDialog();
+
       if (response.statusCode == 200) {
         setState(() => _isCreatingNew = false);
         _fetchSessions();
 
-        // 4. دمج بيانات الجلسة مع بيانات الحساب الوهمي في محتوى الـ QR (حزمة JSON متكاملة)
         final qrPayload = jsonEncode({
           'session_token': response.data['session_token'],
           'phone': fakePhone,
@@ -156,6 +212,8 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
         _showQrCodeDialog(qrPayload, response.data['session_name']);
       }
     } catch (e) {
+      _hideLoadingDialog();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('فشل توليد الجلسة أو الحساب المرتبط'), backgroundColor: Colors.red),
       );
@@ -165,7 +223,6 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
   void _showQrCodeDialog(String qrDataString, String sessionName) {
     _wsChannel?.sink.close();
 
-    // استخراج الـ session_token الأصلي من الحزمة للاتصال بالـ WebSocket ومراقبة المسح
     String tokenToTrack = '';
     try {
       final decoded = jsonDecode(qrDataString);
@@ -178,7 +235,6 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
     final wsUri = '${baseUrl.replaceFirst('http', 'ws').replaceAll('/api', '')}/auth/ws/admin/sessions/$tokenToTrack';
 
     _wsChannel = WebSocketChannel.connect(Uri.parse(wsUri));
-
     bool isDialogDismissed = false;
 
     _wsChannel!.stream.listen((message) {
@@ -222,7 +278,7 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
                 width: 240,
                 height: 240,
                 child: QrImageView(
-                  data: qrDataString, // تمرير حزمة الـ JSON التي تحتوي على الحساب والجلسة معاً
+                  data: qrDataString,
                   version: QrVersions.auto, 
                   size: 240.0,
                   backgroundColor: Colors.white,
@@ -242,13 +298,18 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
   }
 
   Future<void> _controlSession(String sessionId, String action) async {
+    _showLoadingDialog('جاري تنفيذ الإجراء...');
     try {
       await _apiService.dio.patch('/auth/admin/sessions/$sessionId/control', queryParameters: {'action': action});
+      _hideLoadingDialog();
       _fetchSessions();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم تنفيذ الإجراء بنجاح'), backgroundColor: Colors.green),
       );
     } catch (e) {
+      _hideLoadingDialog();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('فشل تنفيذ الإجراء'), backgroundColor: Colors.red),
       );
@@ -261,14 +322,17 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
     final isDesktop = MediaQuery.of(context).size.width > 768;
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: _isCreatingNew
           ? _buildCreateSessionView(theme, isDesktop)
           : _buildSessionsListView(theme, isDesktop),
       floatingActionButton: !_isCreatingNew
           ? FloatingActionButton.extended(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: Colors.white,
               onPressed: () => setState(() => _isCreatingNew = true),
               icon: const Icon(Icons.add_rounded),
-              label: const Text('توليد جلسة جديدة'),
+              label: const Text('توليد جلسة جديدة', style: TextStyle(fontWeight: FontWeight.bold)),
             )
           : null,
     );
@@ -347,6 +411,12 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
                   onPressed: _submitGenerateSession,
                   icon: const Icon(Icons.qr_code_rounded),
                   label: const Text('توليد وعرض رمز الاستجابة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -360,8 +430,27 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
   }
 
   Widget _buildSessionsListView(ThemeData theme, bool isDesktop) {
+    final isDark = theme.brightness == Brightness.dark;
+
     return _isLoading
-        ? const Center(child: CircularProgressIndicator())
+        ? ListView.builder(
+            padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
+            itemCount: 4,
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Shimmer.fromColors(
+                baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                child: Container(
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          )
         : _sessions.isEmpty
             ? Center(
                 child: Column(
@@ -384,40 +473,67 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
                   final device = session['device_info'] ?? '-';
                   final token = session['session_token'] ?? '';
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      title: Text(session['session_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 4),
-                          Text('الحالة: ${isScanned ? "مُستخدمة (مسحوبة)" : "في انتظار المسح"} | نشطة: ${isActive ? "نعم" : "معلقة"}'),
-                          Text('IP: $ip'),
-                          Text('الجهاز: $device', maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.qr_code_2_rounded, color: Colors.blue),
-                            onPressed: () => _showQrCodeDialog(token, session['session_name']),
-                            tooltip: 'عرض الباركود',
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Slidable(
+                        endActionPane: ActionPane(
+                          motion: const ScrollMotion(),
+                          extentRatio: 0.45,
+                          children: [
+                            SlidableAction(
+                              onPressed: (_) => _showQrCodeDialog(token, session['session_name']),
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.blue,
+                              icon: Icons.qr_code_2_rounded,
+                            ),
+                            SlidableAction(
+                              onPressed: (_) => _controlSession(session['id'], isActive ? 'suspend' : 'activate'),
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: isActive ? Colors.orange : Colors.green,
+                              icon: isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                            ),
+                            SlidableAction(
+                              onPressed: (_) => _controlSession(session['id'], 'delete'),
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.redAccent,
+                              icon: Icons.delete_outline_rounded,
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: theme.cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.withOpacity(0.08)),
                           ),
-                          IconButton(
-                            icon: Icon(isActive ? Icons.pause_circle_rounded : Icons.play_circle_rounded, color: isActive ? Colors.orange : Colors.green),
-                            onPressed: () => _controlSession(session['id'], isActive ? 'suspend' : 'activate'),
-                            tooltip: isActive ? 'تعليق الجلسة' : 'تنشيط الجلسة',
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            leading: CircleAvatar(
+                              backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                              child: Icon(Icons.qr_code_rounded, color: theme.colorScheme.primary, size: 20),
+                            ),
+                            title: Text(
+                              session['session_name'],
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'الحالة: ${isScanned ? "مُستخدمة (مسحوبة)" : "في انتظار المسح"} | نشطة: ${isActive ? "نعم" : "معلقة"}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text('IP: $ip • الجهاز: $device', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                ],
+                              ),
+                            ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_rounded, color: Colors.red),
-                            onPressed: () => _controlSession(session['id'], 'delete'),
-                            tooltip: 'حذف الجلسة وطرد المعدل',
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   );

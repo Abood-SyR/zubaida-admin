@@ -1,0 +1,296 @@
+[
+    {
+        "id": "15f478e4-4a70-4ba1-84bb-4824d7359137",
+        "report_type": "search_insights",
+        "period_name": "تحليل ذكاء البحث - 2026-10-16 01:03",
+        "start_date": "2026-10-09T01:03:43.061112+00:00",
+        "end_date": "2026-10-16T01:03:43.061112+00:00",
+        "metrics": {
+            "model_used": "gemini-3.8-flash",
+            "report_source": "ai_search_intelligence",
+            "top_searched_items": [
+                {
+                    "count": 1,
+                    "query": "كريم تنحيف"
+                },
+                {
+                    "count": 1,
+                    "query": "كريم تبييض"
+                },
+                {
+                    "count": 1,
+                    "query": "تنشيط خلالا"
+                },
+                {
+                    "count": 1,
+                    "query": "تنشيط خلايا"
+                },
+                {
+                    "count": 1,
+                    "query": "كريم تنحيف"
+                },
+                {
+                    "count": 1,
+                    "query": "مب"
+                },
+                {
+                    "count": 1,
+                    "query": "مبشر"
+                },
+                {
+                    "count": 1,
+                    "query": "مقشر صدر"
+                }
+            ],
+            "total_analyzed_queries": 8,
+            "total_failed_searches_volume": 8
+        },
+        "created_at": "2026-10-16T01:03:43.062646+00:00"
+    },
+    {
+        "id": "d6e2823e-51a6-496a-a846-4d5f20b344eb",
+        "report_type": "search_insights",
+        "period_name": "تحليل ذكاء البحث - 2026-10-14 02:36",
+        "start_date": "2026-10-07T02:36:43.007881+00:00",
+        "end_date": "2026-10-14T02:36:43.007881+00:00",
+        "metrics": {
+            "model_used": "gemini-3.8-flash",
+            "report_source": "ai_search_intelligence",
+            "top_searched_items": [
+                {
+                    "count": 1,
+                    "query": "مرطب كس"
+                },
+                {
+                    "count": 1,
+                    "query": "مرطبطيز"
+                },
+                {
+                    "count": 1,
+                    "query": "مرطب طيز"
+                },
+                {
+                    "count": 1,
+                    "query": "مرطب صدر"
+                },
+                {
+                    "count": 1,
+                    "query": "مرطب يدين"
+                },
+                {
+                    "count": 1,
+                    "query": "مرطب قدمين"
+                },
+                {
+                    "count": 1,
+                    "query": "مرطب قدي"
+                },
+                {
+                    "count": 1,
+                    "query": "مبيض كس"
+                },
+                {
+                    "count": 1,
+                    "query": "مبيض"
+                },
+                {
+                    "count": 1,
+                    "query": "مبيض"
+                }
+            ],
+            "total_analyzed_queries": 35,
+            "total_failed_searches_volume": 35
+        },
+        "created_at": "2026-10-14T02:36:43.011481+00:00"
+    },
+    {
+        "id": "286988ea-0b3f-40e0-8729-8df4c333c251",
+        "report_type": "search_insights",
+        "period_name": "تحليل ذكاء البحث - 2026-10-14 02:15",
+        "start_date": "2026-10-07T02:15:32.920595+00:00",
+        "end_date": "2026-10-14T02:15:32.920595+00:00",
+        "metrics": {
+            "model_used": "gemini-3.8-flash",
+            "report_source": "ai_search_intelligence",
+            "top_searched_items": [
+                {
+                    "count": 1,
+                    "query": "منتج"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج تجميل"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج تجميل كس"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج تفتيح كس"
+                },
+                {
+                    "count": 1,
+                    "query": "ترطيب كس"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج لترطيب الكس"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج لف"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج لفتح"
+                },
+                {
+                    "count": 1,
+                    "query": "منتج لفتح الطيز"
+                }
+            ],
+            "total_analyzed_queries": 29,
+            "total_failed_searches_volume": 29
+        },
+        "created_at": "2026-10-14T02:15:32.921226+00:00"
+    },
+    {
+        "id": "df00375c-9761-45bc-963a-a0db9ad79cb3",
+        "report_type": "search_insights",
+        "period_name": "تحليل ذكاء البحث - 2026-10-14 02:03",
+        "start_date": "2026-10-07T02:03:22.139780+00:00",
+        "end_date": "2026-10-14T02:03:22.139780+00:00",
+        "metrics": {
+            "model_used": "gemini-3.8-flash",
+            "report_source": "ai_search_intelligence",
+            "top_searched_items": [
+                {
+                    "count": 1,
+                    "query": "زيت لسهولة فتح الكس"
+                },
+                {
+                    "count": 1,
+                    "query": "مزلف طيز"
+                },
+                {
+                    "count": 1,
+                    "query": "شفرة كس"
+                },
+                {
+                    "count": 1,
+                    "query": "قضيب اصطناعي"
+                },
+                {
+                    "count": 1,
+                    "query": "تأجير زب ا"
+                },
+                {
+                    "count": 1,
+                    "query": "تأجير زب اصطناعي"
+                },
+                {
+                    "count": 1,
+                    "query": "كس زهري"
+                },
+                {
+                    "count": 1,
+                    "query": "كس زهري مرطب"
+                },
+                {
+                    "count": 1,
+                    "query": "تأجير زب رجل حقيقي"
+                },
+                {
+                    "count": 1,
+                    "query": "مشقر كس لل"
+                }
+            ],
+            "total_analyzed_queries": 44,
+            "total_failed_searches_volume": 44
+        },
+        "created_at": "2026-10-14T02:03:22.141223+00:00"
+    },
+    {
+        "id": "7845bd6a-5e7d-4c23-accf-9819068cf354",
+        "report_type": "search_insights",
+        "period_name": "تحليل ذكاء البحث - 2026-10-14",
+        "start_date": "2026-10-07T01:46:18.556541+00:00",
+        "end_date": "2026-10-14T01:46:18.556541+00:00",
+        "metrics": {
+            "model_used": "gemini-3.8-flash",
+            "report_source": "ai_search_intelligence",
+            "top_searched_items": [
+                {
+                    "count": 1,
+                    "query": "مزلق للكس"
+                },
+                {
+                    "count": 1,
+                    "query": "تنحيف كس"
+                },
+                {
+                    "count": 1,
+                    "query": "تبييض كس"
+                },
+                {
+                    "count": 1,
+                    "query": "احماء"
+                },
+                {
+                    "count": 1,
+                    "query": "مفتح كس"
+                },
+                {
+                    "count": 1,
+                    "query": "تر"
+                },
+                {
+                    "count": 1,
+                    "query": "ترطيب صدر"
+                },
+                {
+                    "count": 1,
+                    "query": "مرطب صدر"
+                },
+                {
+                    "count": 1,
+                    "query": "مبيض صدر"
+                },
+                {
+                    "count": 1,
+                    "query": "خافي عيوب للكس"
+                }
+            ],
+            "total_analyzed_queries": 31,
+            "total_failed_searches_volume": 31
+        },
+        "created_at": "2026-10-14T01:46:18.557972+00:00"
+    },
+    {
+        "id": "b616fa21-3029-434e-96fb-128f34214832",
+        "report_type": "monthly",
+        "period_name": "Monthly Report - October 2026",
+        "start_date": "2026-09-08T20:09:19.544446+00:00",
+        "end_date": "2026-10-08T20:09:19.544446+00:00",
+        "metrics": {
+            "total_profit": 145040.0,
+            "total_revenue": 475100.0,
+            "status_breakdown": {
+                "pending": 1,
+                "shipping": 1,
+                "cancelled": 0,
+                "completed": 3,
+                "processing": 1
+            },
+            "average_basket_size": 79183.33,
+            "new_users_registered": 4,
+            "total_orders_in_period": 6
+        },
+        "created_at": "2026-10-08T20:09:20.374327+00:00"
+    }
+]

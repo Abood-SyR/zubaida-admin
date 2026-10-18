@@ -1,3 +1,6 @@
+import 'package:dashboard/core/services/api_service.dart';
+import 'package:dashboard/screens/prefernces/prefernces.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,10 +9,10 @@ import '../home/home_analytics_screen.dart';
 import '../products/products_screen.dart';
 import '../offers/offers_screen.dart';
 import '../offers/discounts_screen.dart';
-import '../groups/groups_screen.dart'; // صفحة المجموعات الجديدة
-import '../categories/categories_screen.dart'; // صفحة إدارة الفئات
-import '../search/search_management_screen.dart'; // صفحة إدارة البحث
-import '../ui/ui_management_screen.dart'; // صفحة إدارة الواجهات
+import '../groups/groups_screen.dart';
+import '../categories/categories_screen.dart';
+import '../search/search_management_screen.dart';
+import '../ui/ui_management_screen.dart';
 import '../settings/qr_sessions_screen.dart';
 import '../orders/status/current_orders_screen.dart';
 import '../orders/status/processing_orders_screen.dart';
@@ -29,8 +32,9 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool _isOrdersExpanded = false;
   bool _isOffersExpanded = false;
   bool _isThemeExpanded = false;
+  bool _isSavingChanges = false;
   String _userRole = 'admin';
-
+  final ApiService _apiService = ApiService();
   @override
   void initState() {
     super.initState();
@@ -43,6 +47,51 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       _userRole = prefs.getString('user_role') ?? 'admin';
     });
   }
+
+  Future<void> _saveChanges() async {
+  setState(() {
+    _isSavingChanges = true;
+  });
+
+  try {
+    // باستخدام ApiService وDio يتم إرفاق الـ Token تلقائياً عبر الـ Interceptor
+    final response = await _apiService.dio.get('/save_changes/home_update');
+
+    if (!mounted) return;
+
+    if (response.statusCode == 200) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم حفظ التغييرات وتحديث بيانات التطبيق بنجاح'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  } catch (e) {
+    if (!mounted) return;
+    // استخراج رسالة الخطأ القادمة من السيرفر إن وجدت
+    String errorMsg = 'تعذر حفظ التغييرات';
+    if (e is DioException && e.response?.data != null) {
+      final errorData = e.response?.data;
+      errorMsg = errorData['detail'] ?? errorMsg;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(errorMsg),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isSavingChanges = false;
+      });
+    }
+  }
+}
 
   Future<void> _logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
@@ -97,6 +146,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
     final isDesktop = MediaQuery.of(context).size.width > 768;
 
     return GestureDetector(
@@ -140,6 +190,32 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                           _getTitle(),
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
+                        const Spacer(),
+                        _isSavingChanges
+                            ? SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: primary,
+                                ),
+                              )
+                            : OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: primary,
+                                  side: BorderSide(color: primary.withOpacity(0.5)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                onPressed: _saveChanges,
+                                icon: const Icon(Icons.refresh_rounded, size: 18),
+                                label: const Text(
+                                  'تحديث التغييرات',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
                       ],
                     ),
                   ),
@@ -172,6 +248,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       case 10: return 'قائمة التجهيز';
       case 11: return 'قائمة التوصيل';
       case 12: return 'الطلبات المنجزة';
+      case 15: return 'إدارة التفضيلات';
       case 4: return 'إدارة جلسات المعدلين';
       default: return 'لوحة التحكم';
     }
@@ -183,14 +260,15 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       case 1: return const ProductsScreen();
       case 2: return const DiscountsScreen();
       case 13: return const OffersScreen();
-      case 14: return const GroupsScreen(); // شاشة المجموعات
-      case 5: return const CategoriesScreen(); // شاشة إدارة الفئات
-      case 6: return const SearchManagementScreen(); // شاشة إدارة البحث
-      case 7: return const UiManageScreen(); // شاشة إدارة الواجهات
+      case 14: return const GroupsScreen();
+      case 5: return const CategoriesScreen();
+      case 6: return const SearchManagementScreen();
+      case 7: return const UiManageScreen();
       case 3: return const CurrentOrdersScreen();
       case 10: return const ProcessingOrdersScreen();
       case 11: return const ShippingOrdersScreen();
       case 12: return const CompletedOrdersScreen();
+      case 15: return const PreferencesScreen();
       case 4: return const QrSessionsScreen();
       default: return const HomeAnalyticsScreen();
     }
@@ -236,7 +314,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               _navItem(context, 0, 'الرئيسية والإحصائيات', Icons.dashboard_rounded, isMobile),
               _navItem(context, 1, 'المنتجات والمخزون', Icons.inventory_2_rounded, isMobile),
               
-              // قسم العروض والخصومات والمجموعات
               Theme(
                 data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                 child: Container(
@@ -269,13 +346,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                     children: [
                       _subNavItem(context, 2, 'الخصومات الفردية', isMobile),
                       _subNavItem(context, 13, 'العروض والحزم', isMobile),
-                      _subNavItem(context, 14, 'المجموعات', isMobile), // زر المجموعات الجديد
+                      _subNavItem(context, 14, 'المجموعات', isMobile),
                     ],
                   ),
                 ),
               ),
               
-              // قسم الطلبات
               Theme(
                 data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                 child: Container(
@@ -314,10 +390,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
               if (_userRole == 'admin') _navItem(context, 4, 'إدارة جلسات المعدلين', Icons.qr_code_rounded, isMobile),
               
-              // أزرار الإدارة الجديدة (إدارة الفئات، إدارة البحث، إدارة الواجهات)
               _navItem(context, 5, 'إدارة الفئات', Icons.category_rounded, isMobile),
               _navItem(context, 6, 'إدارة البحث', Icons.search_rounded, isMobile),
               _navItem(context, 7, 'إدارة الواجهات', Icons.web_rounded, isMobile),
+              
+              // تمت إضافة زر إدارة التفضيلات هنا لكي يظهر في القائمة الجانبية للشاشات الكبيرة
+              _navItem(context, 15, 'إدارة التفضيلات', Icons.favorite_rounded, isMobile),
               
               const Divider(height: 20),
               
@@ -363,40 +441,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
                 ),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 onTap: () => _logout(context),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(16.0),
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.08)),
-            ),
-          ),
-          child: const Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.blueGrey,
-                child: Text(
-                  'A',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-              ),
-              SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Powered By',
-                    style: TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                  Text(
-                    'Abdullrahman Abdullah',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                ],
               ),
             ],
           ),
@@ -673,7 +717,7 @@ class _ModernDropMenuScreenState extends State<ModernDropMenuScreen> {
                         _buildItem(5, 'إدارة الفئات', Icons.category_rounded),
                         _buildItem(6, 'إدارة البحث', Icons.search_rounded),
                         _buildItem(7, 'إدارة الواجهات', Icons.web_rounded),
-
+                        _buildItem(15, 'إدارة التفضيلات', Icons.favorite_rounded),
                         const Divider(height: 20),
 
                         Theme(
@@ -721,40 +765,6 @@ class _ModernDropMenuScreenState extends State<ModernDropMenuScreen> {
                             Navigator.pop(context);
                             widget.onLogout();
                           },
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(16.0),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: theme.dividerColor.withOpacity(0.08)),
-                      ),
-                    ),
-                    child: const Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.blueGrey,
-                          child: Text(
-                            'A',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Powered By',
-                              style: TextStyle(fontSize: 10, color: Colors.grey),
-                            ),
-                            Text(
-                              'Abdullrahman Abdullah',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                            ),
-                          ],
                         ),
                       ],
                     ),
