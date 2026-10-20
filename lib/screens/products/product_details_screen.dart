@@ -1,3 +1,4 @@
+import 'package:dashboard/core/utils/image_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -175,21 +176,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     }
   }
 
-  Widget _buildShimmerBox({required double width, required double height, required double radius}) {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[300]!,
-      highlightColor: Colors.grey[100]!,
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(radius),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -253,7 +239,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // شيمر الصورة الرئيسية
                         Container(
                           height: 280,
                           width: double.infinity,
@@ -263,7 +248,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        // شيمر الصور المصغرة
                         Row(
                           children: List.generate(
                             4,
@@ -279,12 +263,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        // شيمر العنوان والنصوص
                         Container(width: 220, height: 28, color: Colors.white),
                         const SizedBox(height: 10),
                         Container(width: double.infinity, height: 45, color: Colors.white),
                         const SizedBox(height: 20),
-                        // شيمر البطاقات المالية
                         Row(
                           children: List.generate(
                             4,
@@ -301,7 +283,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        // شيمر قسم التحليلات
                         Container(
                           height: 250,
                           width: double.infinity,
@@ -335,7 +316,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   child: Stack(
                                     children: [
                                       Container(
+                                        height: 280,
+                                        width: double.infinity,
                                         decoration: BoxDecoration(
+                                          color: isDark ? Colors.grey[900] : Colors.grey[100],
                                           borderRadius: BorderRadius.circular(24),
                                           boxShadow: [
                                             BoxShadow(
@@ -345,26 +329,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             ),
                                           ],
                                         ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(24),
-                                          child: Image.network(
-                                            activeDisplayImage,
-                                            height: 280,
+                                        // تقييد الصورة داخل حاوية مؤمنة بـ SizedBox و optimizedNetworkImage
+                                        child: SizedBox(
+                                          height: 280,
+                                          width: double.infinity,
+                                          child: optimizedNetworkImage(
+                                            imageUrl: activeDisplayImage,
                                             width: double.infinity,
-                                            fit: BoxFit.cover,
-                                            loadingBuilder: (context, child, loadingProgress) {
-                                              if (loadingProgress == null) return child;
-                                              return _buildShimmerBox(
-                                                width: double.infinity,
-                                                height: 280,
-                                                radius: 24,
-                                              );
-                                            },
-                                            errorBuilder: (context, error, stackTrace) => Container(
-                                              height: 280,
-                                              color: Colors.grey[200],
-                                              child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                                            ),
+                                            height: 280,
+                                            fit: BoxFit.contain,
+                                            cacheWidth: 800,
+                                            cacheHeight: 800,
+                                            borderRadius: BorderRadius.circular(24),
                                           ),
                                         ),
                                       ),
@@ -398,38 +374,38 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           onTap: () => setState(() => _isThumbnailSelected = true),
                                           child: Container(
                                             width: 70,
+                                            height: 75,
                                             margin: const EdgeInsets.only(left: 10),
                                             decoration: BoxDecoration(
+                                              color: isDark ? Colors.grey[900] : Colors.grey[100],
                                               borderRadius: BorderRadius.circular(14),
                                               border: Border.all(
                                                 color: _isThumbnailSelected ? theme.colorScheme.primary : Colors.transparent,
                                                 width: 2.5,
                                               ),
                                             ),
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(12),
-                                              child: Stack(
-                                                fit: StackFit.expand,
-                                                children: [
-                                                  Image.network(
-                                                    thumbnailUrl,
-                                                    fit: BoxFit.cover,
-                                                    loadingBuilder: (context, child, loadingProgress) {
-                                                      if (loadingProgress == null) return child;
-                                                      return _buildShimmerBox(width: 70, height: 75, radius: 12);
-                                                    },
+                                            child: Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                optimizedNetworkImage(
+                                                  imageUrl: thumbnailUrl,
+                                                  width: 70,
+                                                  height: 75,
+                                                  fit: BoxFit.contain,
+                                                  cacheWidth: 200,
+                                                  cacheHeight: 200,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                Align(
+                                                  alignment: Alignment.bottomCenter,
+                                                  child: Container(
+                                                    width: double.infinity,
+                                                    color: Colors.black45,
+                                                    padding: const EdgeInsets.symmetric(vertical: 2),
+                                                    child: const Text('الرئيسية', style: TextStyle(color: Colors.white, fontSize: 9), textAlign: TextAlign.center),
                                                   ),
-                                                  Align(
-                                                    alignment: Alignment.bottomCenter,
-                                                    child: Container(
-                                                      width: double.infinity,
-                                                      color: Colors.black45,
-                                                      padding: const EdgeInsets.symmetric(vertical: 2),
-                                                      child: const Text('الرئيسية', style: TextStyle(color: Colors.white, fontSize: 9), textAlign: TextAlign.center),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),
@@ -446,38 +422,38 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           }),
                                           child: Container(
                                             width: 70,
+                                            height: 75,
                                             margin: const EdgeInsets.only(left: 10),
                                             decoration: BoxDecoration(
+                                              color: isDark ? Colors.grey[900] : Colors.grey[100],
                                               borderRadius: BorderRadius.circular(14),
                                               border: Border.all(
                                                 color: isSelected ? theme.colorScheme.primary : Colors.transparent,
                                                 width: 2.5,
                                               ),
                                             ),
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(12),
-                                              child: Stack(
-                                                fit: StackFit.expand,
-                                                children: [
-                                                  Image.network(
-                                                    imgUrl,
-                                                    fit: BoxFit.cover,
-                                                    loadingBuilder: (context, child, loadingProgress) {
-                                                      if (loadingProgress == null) return child;
-                                                      return _buildShimmerBox(width: 70, height: 75, radius: 12);
-                                                    },
+                                            child: Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                optimizedNetworkImage(
+                                                  imageUrl: imgUrl,
+                                                  width: 70,
+                                                  height: 75,
+                                                  fit: BoxFit.contain,
+                                                  cacheWidth: 200,
+                                                  cacheHeight: 200,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                Align(
+                                                  alignment: Alignment.bottomCenter,
+                                                  child: Container(
+                                                    width: double.infinity,
+                                                    color: Colors.black45,
+                                                    padding: const EdgeInsets.symmetric(vertical: 2),
+                                                    child: Text('فرعية ${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 9), textAlign: TextAlign.center),
                                                   ),
-                                                  Align(
-                                                    alignment: Alignment.bottomCenter,
-                                                    child: Container(
-                                                      width: double.infinity,
-                                                      color: Colors.black45,
-                                                      padding: const EdgeInsets.symmetric(vertical: 2),
-                                                      child: Text('فرعية ${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 9), textAlign: TextAlign.center),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         );
@@ -540,15 +516,24 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     ),
                                     const SizedBox(height: 16),
                                     _buildDetailRow(Icons.spa_rounded, 'نوع الاستخدام', (_product!['skin_hair_type'] as List?)?.join(', ') ?? 'غير محدد'),
-                                    _buildDetailRow(Icons.straighten_rounded, 'الأحجام والمقاسات', (_product!['sizes'] as List?)?.join(', ') ?? 'قياسي'),
+                                    
+                                    _buildSizesRow(_product!['sizes']),
+
                                     _buildDetailRow(Icons.menu_book_rounded, 'طريقة الاستعمال', _getText(_product!['usage_instructions'])),
                                     _buildDetailRow(Icons.science_rounded, 'المكونات الأساسية', _getText(_product!['ingredients'])),
                                     _buildDetailRow(Icons.check_circle_outline_rounded, 'توافق البشرة/الشعر', _getText(_product!['compatibility'])),
                                     
-                                    if (_product!['attributes'] is Map && (_product!['attributes'] as Map).isNotEmpty)
+                                    if (_product!['attributes'] is Map && (_product!['attributes'] as Map).isNotEmpty) ...[
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 12),
+                                        child: Divider(),
+                                      ),
+                                      const Text('خصائص مخصصة إضافية:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                      const SizedBox(height: 8),
                                       ...(_product!['attributes'] as Map<String, dynamic>).entries.map(
                                         (entry) => _buildDetailRow(Icons.extension_rounded, entry.key, entry.value.toString()),
                                       ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -655,6 +640,53 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             child: Text(
               value,
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSizesRow(dynamic sizesData) {
+    List<String> sizesList = [];
+    if (sizesData is List) {
+      sizesList = sizesData.map((e) => e.toString()).toList();
+    } else if (sizesData != null && sizesData.toString().isNotEmpty) {
+      sizesList = [sizesData.toString()];
+    }
+
+    if (sizesList.isEmpty) sizesList = ['قياسي (Standard)'];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.straighten_rounded, size: 18, color: Colors.grey[500]),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 110,
+            child: Text('الأحجام المتاحة', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[600], fontSize: 13)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: sizesList.map((size) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.2)),
+                  ),
+                  child: Text(
+                    size,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ],

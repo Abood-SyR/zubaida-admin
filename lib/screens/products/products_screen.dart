@@ -1,3 +1,4 @@
+import 'package:dashboard/core/utils/image_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -84,7 +85,6 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
       _isLoadingMore = true;
     });
 
-    // محاكاة تحميل المزيد تدريجياً من القائمة المحلية
     Future.delayed(const Duration(milliseconds: 400), () {
       if (!mounted) return;
       setState(() {
@@ -218,18 +218,15 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
     }
   }
 
-  // دالة لجلب منتج معين عبر الإنترنت في حال لم يُوجد محلياً أثناء البحث
   Future<void> _searchProductFromApi(String query) async {
     _showLoadingDialog('جاري البحث في السيرفر...');
     try {
-      // افتراضية للبحث عبر الـ API إذا كان السيرفر يدعم استعلام بالاسم، أو جلب المنتج مباشرة برقم معرّف إذا كان مدخلاً كـ ID
       Response response = await _apiService.dio.get('/products/search', queryParameters: {'q': query});
       final List<dynamic> searchResults = response.data is List ? response.data : [response.data];
       
       _hideLoadingDialog();
       if (searchResults.isNotEmpty) {
         setState(() {
-          // دمج النتائج الجديدة مع القائمة الحالية تفادياً للتكرار
           for (var p in searchResults) {
             if (!_products.any((existing) => existing['id'].toString() == p['id'].toString())) {
               _products.insert(0, p);
@@ -567,7 +564,7 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
                           onChanged: (val) {
                             setState(() {
                               _searchQuery = val;
-                              _displayedLimit = 10; // إعادة ضبط العداد عند البحث
+                              _displayedLimit = 10;
                               if (_isSearchOverlayOpen) {
                                 _isSearchOverlayOpen = false;
                                 _animController.reverse();
@@ -774,21 +771,21 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                             leading: Hero(
                                               tag: 'product_image_$productId',
-                                              child: ClipRRect(
-                                                borderRadius: BorderRadius.circular(12),
-                                                child: Container(
-                                                  width: 50,
-                                                  height: 50,
-                                                  color: Colors.grey.withOpacity(0.1),
-                                                  child: imageUrl != null && imageUrl.isNotEmpty
-                                                      ? Image.network(
-                                                          imageUrl,
-                                                          fit: BoxFit.cover,
-                                                          errorBuilder: (context, error, stackTrace) =>
-                                                              const Icon(Icons.image_not_supported, color: Colors.grey),
-                                                        )
-                                                      : const Icon(Icons.image, color: Colors.grey),
-                                                ),
+                                              child: Container(
+                                                width: 50,
+                                                height: 50,
+                                                color: Colors.grey.withOpacity(0.1),
+                                                child: imageUrl != null && imageUrl.isNotEmpty
+                                                    ? optimizedNetworkImage(
+                                                        imageUrl: imageUrl,
+                                                        width: 50,
+                                                        height: 50,
+                                                        fit: BoxFit.contain,
+                                                        cacheWidth: 150,
+                                                        cacheHeight: 150,
+                                                        borderRadius: BorderRadius.circular(12),
+                                                      )
+                                                    : const Icon(Icons.image, color: Colors.grey),
                                               ),
                                             ),
                                             title: Row(
@@ -1031,7 +1028,6 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
         ),
       ),
       selected: isSelected,
-      // selectedCardColor: selectedBg,
       selectedColor: selectedBg,
       backgroundColor: theme.cardColor,
       side: BorderSide.none,

@@ -288,7 +288,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  Future<void> _openProofUrl(String proofUrl) async {
+  Future<void> _openProofUrl(String proofUrlOrPath) async {
     try {
       // إظهار مؤشر تحميل أثناء جلب الملف بالصلاحيات
       showDialog(
@@ -297,12 +297,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      // ضبط مسار الطلب
-      final fullUrl = proofUrl.startsWith('http') ? proofUrl : proofUrl;
+      // استخراج اسم الملف فقط (Filename) سواء كان مساراً كاملاً أو رابطاً قديماً
+      String filename = proofUrlOrPath.split('/').last;
+
+      // ضبط مسار الـ Endpoint الآمن الجديد في السيرفر الخاص بك
+      final String secureEndpoint = '/orders/htfiles/$filename';
       
-      // استخدام Dio الخاص بـ ApiService لضمان إرسال توكن الأدمن تلقائياً
+      // استخدام Dio الخاص بـ ApiService لضمان إرسال توكن الأدمن/المعدل تلقائياً
       Response<List<int>> response = await _apiService.dio.get<List<int>>(
-        fullUrl,
+        secureEndpoint,
         options: Options(responseType: ResponseType.bytes),
       );
 
@@ -325,7 +328,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('إثبات التحويل المالي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Text('إثبات التحويل المالي الآمن', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => Navigator.of(context).pop(),
@@ -341,10 +344,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           UriData.fromBytes(bytes).contentAsBytes(),
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
-                            // إذا لم تكن صورة (مثل ملف PDF)، عرض زر لتحميله أو رسالة
+                            // إذا لم تكن صورة (مثل ملف PDF)، عرض رسالة نجاح التحميل
                             return const Center(
                               child: Text(
-                                'تم استلام ملف PDF أو مستند إثبات التحويل بنجاح.',
+                                'تم تحميل مستند إثبات التحويل (PDF) بنجاح عبر السيرفر.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: Colors.grey),
                               ),
@@ -363,7 +366,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     } catch (e) {
       if (Navigator.canPop(context)) Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فشل تحميل إثبات التحويل، تأكد من الصلاحيات والاتصال'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('فشل جلب إثبات التحويل، تأكد من صلاحيات حسابك والاتصال'), backgroundColor: Colors.red),
       );
     }
   }

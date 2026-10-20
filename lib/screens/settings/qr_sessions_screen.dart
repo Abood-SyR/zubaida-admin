@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:convert';
@@ -34,8 +35,8 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
 
   bool _allowPending = true;
   bool _allowProcessing = true;
-  bool _allowShipping = false;
-  bool _allowCompleted = false;
+  bool _allowShipping = true;
+  bool _allowCompleted = true;
 
   @override
   void initState() {
@@ -56,37 +57,30 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return WillPopScope(
-          onWillPop: () async => false,
+        return PopScope(
+          canPop: false,
           child: Dialog(
             backgroundColor: Colors.transparent,
             elevation: 0,
             child: Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator.adaptive(strokeWidth: 3),
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator.adaptive(strokeWidth: 2),
                   ),
-                  const SizedBox(width: 20),
-                  Expanded(
+                  const SizedBox(width: 16),
+                  Flexible(
                     child: Text(
                       message,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -118,7 +112,7 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
       setState(() => _isLoading = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فشل جلب الجلسات (تأكد من صلاحيات الأدمن)'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('فشل جلب الجلسات'), backgroundColor: Colors.red),
       );
     }
   }
@@ -144,18 +138,40 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
   }
 
   Future<void> _submitGenerateSession() async {
-    if (_nameController.text.trim().isEmpty) {
+    String rawName = _nameController.text.trim();
+    if (rawName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى إدخال اسم الجلسة أو الوردية'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('يرجى إدخال اسم الجلسة'), backgroundColor: Colors.orange),
       );
       return;
     }
 
+    // الاسم المخزن في السيرفر مع إضافة البقرة تلقائياً للتحقق
+    String finalSessionName = rawName;
+    final lowerName = rawName.toLowerCase();
+    if (lowerName.contains('تيماء') || 
+        lowerName.contains('تيومة') || 
+        lowerName.contains('تيما') || 
+        lowerName.contains('تيومى') || 
+        lowerName.contains('تيوم') || 
+        lowerName.contains('تامي') || 
+        lowerName.contains('taymaa') || 
+        lowerName.contains('بنتي') || 
+        lowerName.contains('يزن') || 
+        lowerName.contains('يزون') || 
+        lowerName.contains('يزوني') || 
+        lowerName.contains('يزونتي') || 
+        lowerName.contains('الزيك') || 
+        lowerName.contains('توما') || 
+        lowerName.contains('تيم')) {
+      finalSessionName = '$rawName البقرة';
+    }
+
     List<String> allowedStatuses = [];
-    if (_allowPending) allowedStatuses.add('pending');
-    if (_allowProcessing) allowedStatuses.add('processing');
-    if (_allowShipping) allowedStatuses.add('shipping');
-    if (_allowCompleted) allowedStatuses.add('completed');
+    if (_isFullAccess || _allowPending) allowedStatuses.add('pending');
+    if (_isFullAccess || _allowProcessing) allowedStatuses.add('processing');
+    if (_isFullAccess || _allowShipping) allowedStatuses.add('shipping');
+    if (_isFullAccess || _allowCompleted) allowedStatuses.add('completed');
 
     final differenceInMinutes = _selectedExpiresAt.difference(DateTime.now()).inMinutes;
     if (differenceInMinutes <= 0) {
@@ -165,35 +181,31 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
       return;
     }
 
-    _showLoadingDialog('جاري توليد الحساب وجلسة QR...');
+    _showLoadingDialog('جاري التوليد...');
 
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fakePhone = '9${timestamp.toString().substring(timestamp.toString().length - 9)}';
       final fakePassword = 'Pass_$timestamp!';
 
-      final registerRes = await _apiService.dio.post('/auth/register', data: {
+      await _apiService.dio.post('/auth/register', data: {
         'phone_number': fakePhone,
-        'username': _nameController.text.trim(),
+        'username': finalSessionName,
         'password': fakePassword,
-        'full_name': _nameController.text.trim(),
+        'full_name': finalSessionName,
       });
 
-      if (registerRes.statusCode != 201 && registerRes.statusCode != 200) {
-        throw Exception('فشل إنشاء الحساب الوهمي');
-      }
-
       final response = await _apiService.dio.post('/auth/admin/sessions/generate', data: {
-        'session_name': _nameController.text.trim(),
+        'session_name': finalSessionName,
         'expires_in_minutes': differenceInMinutes,
         'is_full_access': _isFullAccess,
-        'can_view_stats': _canViewStats,
-        'can_manage_products': _canManageProducts,
-        'can_change_price_stock': _canChangePriceStock,
-        'can_manage_offers': _canManageOffers,
-        'can_manage_discounts': _canManageDiscounts,
-        'can_manage_categories': _canManageCategories,
-        'can_manage_sessions': _canManageSessions,
+        'can_view_stats': _isFullAccess ? true : _canViewStats,
+        'can_manage_products': _isFullAccess ? true : _canManageProducts,
+        'can_change_price_stock': _isFullAccess ? true : _canChangePriceStock,
+        'can_manage_offers': _isFullAccess ? true : _canManageOffers,
+        'can_manage_discounts': _isFullAccess ? true : _canManageDiscounts,
+        'can_manage_categories': _isFullAccess ? true : _canManageCategories,
+        'can_manage_sessions': _isFullAccess ? true : _canManageSessions,
         'allowed_order_statuses': allowedStatuses,
       });
 
@@ -209,18 +221,43 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
           'password': fakePassword,
         });
 
-        _showQrCodeDialog(qrPayload, response.data['session_name']);
+        // إرسال الاسم النظيف (rawName) لواجهة الـ QR حتى لا تظهر كلمة البقرة للشخص المعني
+        _showQrCodeDialog(qrPayload, rawName, response.data['id']);
       }
     } catch (e) {
       _hideLoadingDialog();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فشل توليد الجلسة أو الحساب المرتبط'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('فشل توليد الجلسة'), backgroundColor: Colors.red),
       );
     }
   }
 
-  void _showQrCodeDialog(String qrDataString, String sessionName) {
+  Future<void> _resetAndShowQr(String sessionId, String token, String sessionName) async {
+    _showLoadingDialog('جاري تجهيز الرمز...');
+    try {
+      await _apiService.dio.patch('/auth/admin/sessions/$sessionId/control', queryParameters: {'action': 'activate'});
+      _hideLoadingDialog();
+      
+      final qrPayload = jsonEncode({
+        'session_token': token,
+      });
+
+      // تنظيف الاسم المعروض في نافذة الـ QR في حال كان يحتوي على كلمة البقرة المخزنة
+      String cleanDisplayName = sessionName.replaceAll(' البقرة', '').replaceAll('البقرة', '').trim();
+
+      _showQrCodeDialog(qrPayload, cleanDisplayName, sessionId);
+      _fetchSessions();
+    } catch (e) {
+      _hideLoadingDialog();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('فشل إعادة توليد الرمز'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _showQrCodeDialog(String qrDataString, String sessionName, [String? sessionId]) {
     _wsChannel?.sink.close();
 
     String tokenToTrack = '';
@@ -256,38 +293,90 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
 
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      barrierDismissible: true,
+      builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('QR الجلسة: $sessionName', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('جارِ انتظار مسح الرمز من قِبل المعدل...\nسيتم إغلاق النافذة وتحديث القائمة تلقائياً.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, spreadRadius: 2),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const SizedBox(width: 32),
+                  Expanded(
+                    child: Text(
+                      sessionName, // سيظهر الاسم بدون كلمة البقرة حصراً
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ],
               ),
-              child: SizedBox(
-                width: 240,
-                height: 240,
-                child: QrImageView(
-                  data: qrDataString,
-                  version: QrVersions.auto, 
-                  size: 240.0,
-                  backgroundColor: Colors.white,
+              const SizedBox(height: 4),
+              const Text(
+                'امحُ الرمز عبر التطبيق للمتابعة',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.withOpacity(0.15)),
+                ),
+                child: SizedBox(
+                  width: 220,
+                  height: 220,
+                  child: QrImageView(
+                    data: qrDataString,
+                    version: QrVersions.auto,
+                    size: 220.0,
+                    backgroundColor: Colors.white,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const CircularProgressIndicator(strokeWidth: 2),
-          ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: qrDataString));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تم نسخ الرمز بنجاح'), duration: Duration(seconds: 2)),
+                    );
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text('نسخ الرمز بالكامل', style: TextStyle(fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('إغلاق', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ).then((_) {
@@ -298,20 +387,20 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
   }
 
   Future<void> _controlSession(String sessionId, String action) async {
-    _showLoadingDialog('جاري تنفيذ الإجراء...');
+    _showLoadingDialog('جاري التحديث...');
     try {
       await _apiService.dio.patch('/auth/admin/sessions/$sessionId/control', queryParameters: {'action': action});
       _hideLoadingDialog();
       _fetchSessions();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تنفيذ الإجراء بنجاح'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('تم بنجاح'), backgroundColor: Colors.green),
       );
     } catch (e) {
       _hideLoadingDialog();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فشل تنفيذ الإجراء'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('فشل التنفيذ'), backgroundColor: Colors.red),
       );
     }
   }
@@ -328,11 +417,12 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
           : _buildSessionsListView(theme, isDesktop),
       floatingActionButton: !_isCreatingNew
           ? FloatingActionButton.extended(
+              elevation: 2,
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: Colors.white,
               onPressed: () => setState(() => _isCreatingNew = true),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('توليد جلسة جديدة', style: TextStyle(fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text('جلسة جديدة', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             )
           : null,
     );
@@ -343,83 +433,119 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
       padding: EdgeInsets.all(isDesktop ? 32.0 : 16.0),
       child: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 700),
+          constraints: const BoxConstraints(maxWidth: 600),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded),
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                     onPressed: () => setState(() => _isCreatingNew = false),
                   ),
                   const SizedBox(width: 8),
-                  const Text('إعداد وتوليد جلسة معدل جديدة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text('إعداد جلسة جديدة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
-              const Divider(height: 32),
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'اسم الجلسة / الوردية (مثال: أحمد - وردية الصباح)', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 20),
-              InkWell(
-                onTap: _pickExpirationDateTime,
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'تاريخ ووقت انتهاء الصلاحية', border: OutlineInputBorder()),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('${_selectedExpiresAt.year}-${_selectedExpiresAt.month.toString().padLeft(2, '0')}-${_selectedExpiresAt.day.toString().padLeft(2, '0')}  ${_selectedExpiresAt.hour.toString().padLeft(2, '0')}:${_selectedExpiresAt.minute.toString().padLeft(2, '0')}'),
-                      const Icon(Icons.calendar_today_rounded, size: 20),
-                    ],
-                  ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.withOpacity(0.1)),
                 ),
-              ),
-              const SizedBox(height: 20),
-              CheckboxListTile(
-                title: const Text('صلاحيات كاملة (Full Access)', style: TextStyle(fontWeight: FontWeight.bold)),
-                value: _isFullAccess,
-                onChanged: (val) => setState(() => _isFullAccess = val ?? false),
-              ),
-              const Divider(),
-              if (!_isFullAccess) ...[
-                const Text('الصلاحيات الدقيقة الممنوحة:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                const SizedBox(height: 8),
-                CheckboxListTile(title: const Text('رؤية الإحصائيات'), value: _canViewStats, onChanged: (val) => setState(() => _canViewStats = val ?? false)),
-                CheckboxListTile(title: const Text('إدارة المنتجات'), value: _canManageProducts, onChanged: (val) => setState(() => _canManageProducts = val ?? false)),
-                CheckboxListTile(title: const Text('تغيير الأسعار والكميات'), value: _canChangePriceStock, onChanged: (val) => setState(() => _canChangePriceStock = val ?? false)),
-                CheckboxListTile(title: const Text('إدارة العروض'), value: _canManageOffers, onChanged: (val) => setState(() => _canManageOffers = val ?? false)),
-                CheckboxListTile(title: const Text('إدارة الخصومات'), value: _canManageDiscounts, onChanged: (val) => setState(() => _canManageDiscounts = val ?? false)),
-                CheckboxListTile(title: const Text('إدارة الفئات'), value: _canManageCategories, onChanged: (val) => setState(() => _canManageCategories = val ?? false)),
-                CheckboxListTile(title: const Text('إدارة الجلسات'), value: _canManageSessions, onChanged: (val) => setState(() => _canManageSessions = val ?? false)),
-                const SizedBox(height: 16),
-                const Text('حالات الطلبات المسموح بالتعامل معها:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    FilterChip(label: const Text('قيد الانتظار (Pending)'), selected: _allowPending, onSelected: (val) => setState(() => _allowPending = val)),
-                    FilterChip(label: const Text('قيد التجهيز (Processing)'), selected: _allowProcessing, onSelected: (val) => setState(() => _allowProcessing = val)),
-                    FilterChip(label: const Text('قيد التوصيل (Shipping)'), selected: _allowShipping, onSelected: (val) => setState(() => _allowShipping = val)),
-                    FilterChip(label: const Text('منجزة (Completed)'), selected: _allowCompleted, onSelected: (val) => setState(() => _allowCompleted = val)),
+                    TextField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: 'اسم الجلسة',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: _pickExpirationDateTime,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'انتهاء الصلاحية',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('${_selectedExpiresAt.year}-${_selectedExpiresAt.month.toString().padLeft(2, '0')}-${_selectedExpiresAt.day.toString().padLeft(2, '0')}  ${_selectedExpiresAt.hour.toString().padLeft(2, '0')}:${_selectedExpiresAt.minute.toString().padLeft(2, '0')}'),
+                            const Icon(Icons.calendar_today_rounded, size: 18, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ],
-              const SizedBox(height: 32),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('صلاحيات كاملة', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                      value: _isFullAccess,
+                      onChanged: (val) => setState(() => _isFullAccess = val),
+                    ),
+                    if (!_isFullAccess) ...[
+                      const Divider(height: 24),
+                      const Text('الأذونات المخصصة', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
+                      const SizedBox(height: 8),
+                      CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('الإحصائيات'), value: _canViewStats, onChanged: (val) => setState(() => _canViewStats = val ?? false)),
+                      CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('المنتجات'), value: _canManageProducts, onChanged: (val) => setState(() => _canManageProducts = val ?? false)),
+                      CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('الأسعار والمخزون'), value: _canChangePriceStock, onChanged: (val) => setState(() => _canChangePriceStock = val ?? false)),
+                      CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('العروض'), value: _canManageOffers, onChanged: (val) => setState(() => _canManageOffers = val ?? false)),
+                      CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('الخصومات'), value: _canManageDiscounts, onChanged: (val) => setState(() => _canManageDiscounts = val ?? false)),
+                      CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('الفئات'), value: _canManageCategories, onChanged: (val) => setState(() => _canManageCategories = val ?? false)),
+                      CheckboxListTile(contentPadding: EdgeInsets.zero, title: const Text('الجلسات'), value: _canManageSessions, onChanged: (val) => setState(() => _canManageSessions = val ?? false)),
+                      const SizedBox(height: 16),
+                      const Text('حالات الطلبات المتاحة', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilterChip(label: const Text('انتظار'), selected: _allowPending, onSelected: (val) => setState(() => _allowPending = val)),
+                          FilterChip(label: const Text('تجهيز'), selected: _allowProcessing, onSelected: (val) => setState(() => _allowProcessing = val)),
+                          FilterChip(label: const Text('شحن'), selected: _allowShipping, onSelected: (val) => setState(() => _allowShipping = val)),
+                          FilterChip(label: const Text('إنجاز'), selected: _allowCompleted, onSelected: (val) => setState(() => _allowCompleted = val)),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
+                height: 48,
+                child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: _submitGenerateSession,
-                  icon: const Icon(Icons.qr_code_rounded),
-                  label: const Text('توليد وعرض رمز الاستجابة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text('إنشاء الرمز', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
               ),
             ],
@@ -442,10 +568,10 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
                 baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                 highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                 child: Container(
-                  height: 80,
+                  height: 72,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
@@ -456,9 +582,9 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.hourglass_empty_rounded, size: 64, color: Colors.grey[400]),
-                    const SizedBox(height: 16),
-                    const Text('لا توجد جلسات نشطة حالياً للمعدلين', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    Icon(Icons.qr_code_scanner_rounded, size: 48, color: Colors.grey[400]),
+                    const SizedBox(height: 12),
+                    const Text('لا توجد جلسات حالياً', style: TextStyle(color: Colors.grey, fontSize: 14)),
                   ],
                 ),
               )
@@ -469,35 +595,36 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
                   final session = _sessions[index];
                   final isActive = session['is_active'] ?? true;
                   final isScanned = session['is_scanned'] ?? false;
-                  final ip = session['ip_address'] ?? 'لم يتم التسجيل بعد';
-                  final device = session['device_info'] ?? '-';
                   final token = session['session_token'] ?? '';
+                  final sessionId = session['id'];
 
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(12),
                       child: Slidable(
                         endActionPane: ActionPane(
                           motion: const ScrollMotion(),
-                          extentRatio: 0.45,
+                          extentRatio: 0.4,
                           children: [
                             SlidableAction(
-                              onPressed: (_) => _showQrCodeDialog(token, session['session_name']),
+                              onPressed: (_) {
+                                _resetAndShowQr(sessionId, token, session['session_name']);
+                              },
                               backgroundColor: Colors.transparent,
                               foregroundColor: Colors.blue,
-                              icon: Icons.qr_code_2_rounded,
+                              icon: Icons.qr_code_rounded,
                             ),
                             SlidableAction(
-                              onPressed: (_) => _controlSession(session['id'], isActive ? 'suspend' : 'activate'),
+                              onPressed: (_) => _controlSession(sessionId, isActive ? 'suspend' : 'activate'),
                               backgroundColor: Colors.transparent,
                               foregroundColor: isActive ? Colors.orange : Colors.green,
-                              icon: isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                              icon: isActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
                             ),
                             SlidableAction(
-                              onPressed: (_) => _controlSession(session['id'], 'delete'),
+                              onPressed: (_) => _controlSession(sessionId, 'delete'),
                               backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.redAccent,
+                              foregroundColor: Colors.red,
                               icon: Icons.delete_outline_rounded,
                             ),
                           ],
@@ -505,32 +632,31 @@ class _QrSessionsScreenState extends State<QrSessionsScreen> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: theme.cardColor,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.grey.withOpacity(0.08)),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.withOpacity(0.1)),
                           ),
                           child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            leading: CircleAvatar(
-                              backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-                              child: Icon(Icons.qr_code_rounded, color: theme.colorScheme.primary, size: 20),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            leading: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: (isScanned ? Colors.grey : Colors.green).withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                isScanned ? Icons.check_rounded : Icons.qr_code_rounded,
+                                color: isScanned ? Colors.grey : Colors.green,
+                                size: 18,
+                              ),
                             ),
                             title: Text(
                               session['session_name'],
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                             ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'الحالة: ${isScanned ? "مُستخدمة (مسحوبة)" : "في انتظار المسح"} | نشطة: ${isActive ? "نعم" : "معلقة"}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text('IP: $ip • الجهاز: $device', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                ],
-                              ),
+                            subtitle: Text(
+                              isScanned ? 'تم الاستخدام' : 'جاهز للمسح',
+                              style: TextStyle(fontSize: 12, color: isScanned ? Colors.grey : Colors.green),
                             ),
                           ),
                         ),

@@ -1,3 +1,4 @@
+import 'package:dashboard/core/utils/image_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -256,70 +257,82 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: Text(isEditing ? 'تعديل القسم' : 'إضافة قسم جديد'),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameArController,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم القسم (عربي)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // معاينة واختيار الصورة من الملفات
-                GestureDetector(
-                  onTap: () async {
-                    final picker = ImagePicker();
-                    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-                    if (pickedFile != null) {
-                      setDialogState(() {
-                        selectedImageFile = pickedFile;
-                      });
-                    }
-                  },
-                  child: Container(
-                    height: 120,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+            child: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameArController,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم القسم (عربي)',
+                      border: OutlineInputBorder(),
                     ),
-                    child: selectedImageFile != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: kIsWeb
-                                ? Image.network(selectedImageFile!.path, fit: BoxFit.cover)
-                                : Image.file(File(selectedImageFile!.path), fit: BoxFit.cover),
-                          )
-                        : existingImageUrl != null && existingImageUrl.isNotEmpty
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  existingImageUrl,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 40, color: Colors.grey),
-                                ),
-                              )
-                            : const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.add_a_photo_outlined, size: 32, color: Colors.grey),
-                                  SizedBox(height: 8),
-                                  Text('اضغط لاختيار صورة من الجهاز', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                ],
-                              ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  title: const Text('حالة النشاط'),
-                  value: isActive,
-                  onChanged: (val) => setDialogState(() => isActive = val),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  
+                  // معاينة واختيار الصورة مع أبعاد ثابتة وصريحة لمنع انهيار الـ RenderBox
+                  GestureDetector(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                      if (pickedFile != null) {
+                        setDialogState(() {
+                          selectedImageFile = pickedFile;
+                        });
+                      }
+                    },
+                    child: Container(
+                      height: 130,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                      ),
+                      child: selectedImageFile != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: SizedBox(
+                                height: 130,
+                                width: double.infinity,
+                                child: kIsWeb
+                                    ? Image.network(selectedImageFile!.path, fit: BoxFit.contain)
+                                    : Image.file(File(selectedImageFile!.path), fit: BoxFit.contain),
+                              ),
+                            )
+                          : existingImageUrl != null && existingImageUrl.isNotEmpty
+                              ? SizedBox(
+                                  height: 130,
+                                  width: double.infinity,
+                                  child: optimizedNetworkImage(
+                                    imageUrl: existingImageUrl,
+                                    width: double.infinity,
+                                    height: 130,
+                                    fit: BoxFit.contain,
+                                    cacheWidth: 400,
+                                    cacheHeight: 400,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                )
+                              : const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.add_a_photo_outlined, size: 32, color: Colors.grey),
+                                    SizedBox(height: 8),
+                                    Text('اضغط لاختيار صورة من الجهاز', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                  ],
+                                ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    title: const Text('حالة النشاط'),
+                    value: isActive,
+                    onChanged: (val) => setDialogState(() => isActive = val),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -530,20 +543,25 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                       ),
                                       child: ListTile(
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        leading: ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: Container(
-                                            width: 50,
-                                            height: 50,
-                                            color: Colors.grey.withOpacity(0.1),
-                                            child: imageUrl != null && imageUrl.isNotEmpty
-                                                ? Image.network(
-                                                    imageUrl,
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (context, error, stackTrace) =>
-                                                        const Icon(Icons.image_not_supported, color: Colors.grey),
-                                                  )
-                                                : const Icon(Icons.category, color: Colors.grey),
+                                        leading: SizedBox(
+                                          width: 50,
+                                          height: 50,
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: Container(
+                                              color: Colors.grey.withOpacity(0.1),
+                                              child: imageUrl != null && imageUrl.isNotEmpty
+                                                  ? optimizedNetworkImage(
+                                                      imageUrl: imageUrl,
+                                                      width: 50,
+                                                      height: 50,
+                                                      fit: BoxFit.contain,
+                                                      cacheWidth: 150,
+                                                      cacheHeight: 150,
+                                                      borderRadius: BorderRadius.circular(12),
+                                                    )
+                                                  : const Icon(Icons.category, color: Colors.grey),
+                                            ),
                                           ),
                                         ),
                                         title: Row(

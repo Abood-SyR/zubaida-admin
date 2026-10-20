@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart'; // حزمة فتح روابط الواتساب
 import '../../core/theme/theme_provider.dart';
 import '../home/home_analytics_screen.dart';
 import '../products/products_screen.dart';
@@ -35,6 +36,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   bool _isSavingChanges = false;
   String _userRole = 'admin';
   final ApiService _apiService = ApiService();
+
   @override
   void initState() {
     super.initState();
@@ -48,50 +50,62 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     });
   }
 
+  // دالة فتح رابط الواتساب
+  Future<void> _launchWhatsApp() async {
+    final Uri whatsappUri = Uri.parse('https://wa.me/963981082693');
+    try {
+      if (await canLaunchUrl(whatsappUri)) {
+        await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+      } else {
+        debugPrint('Could not launch WhatsApp');
+      }
+    } catch (e) {
+      debugPrint('Error launching WhatsApp: $e');
+    }
+  }
+
   Future<void> _saveChanges() async {
-  setState(() {
-    _isSavingChanges = true;
-  });
+    setState(() {
+      _isSavingChanges = true;
+    });
 
-  try {
-    // باستخدام ApiService وDio يتم إرفاق الـ Token تلقائياً عبر الـ Interceptor
-    final response = await _apiService.dio.get('/save_changes/home_update');
+    try {
+      final response = await _apiService.dio.get('/save_changes/home_update');
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حفظ التغييرات وتحديث بيانات التطبيق بنجاح'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      String errorMsg = 'تعذر حفظ التغييرات';
+      if (e is DioException && e.response?.data != null) {
+        final errorData = e.response?.data;
+        errorMsg = errorData['detail'] ?? errorMsg;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم حفظ التغييرات وتحديث بيانات التطبيق بنجاح'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),
       );
-    }
-  } catch (e) {
-    if (!mounted) return;
-    // استخراج رسالة الخطأ القادمة من السيرفر إن وجدت
-    String errorMsg = 'تعذر حفظ التغييرات';
-    if (e is DioException && e.response?.data != null) {
-      final errorData = e.response?.data;
-      errorMsg = errorData['detail'] ?? errorMsg;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(errorMsg),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  } finally {
-    if (mounted) {
-      setState(() {
-        _isSavingChanges = false;
-      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingChanges = false;
+        });
+      }
     }
   }
-}
 
   Future<void> _logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
@@ -119,6 +133,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             isOffersExpanded: _isOffersExpanded,
             isThemeExpanded: _isThemeExpanded,
             userRole: _userRole,
+            onWhatsAppTap: _launchWhatsApp,
             onItemSelected: (index, isOrdersExp, isOffersExp, isThemeExp) {
               setState(() {
                 _selectedIndex = index;
@@ -393,8 +408,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               _navItem(context, 5, 'إدارة الفئات', Icons.category_rounded, isMobile),
               _navItem(context, 6, 'إدارة البحث', Icons.search_rounded, isMobile),
               _navItem(context, 7, 'إدارة الواجهات', Icons.web_rounded, isMobile),
-              
-              // تمت إضافة زر إدارة التفضيلات هنا لكي يظهر في القائمة الجانبية للشاشات الكبيرة
               _navItem(context, 15, 'إدارة التفضيلات', Icons.favorite_rounded, isMobile),
               
               const Divider(height: 20),
@@ -445,7 +458,99 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             ],
           ),
         ),
+        // البطاقة التعريفية المموجة في أسفل السايدبار
+        _buildGitHubStyleCard(context),
       ],
+    );
+  }
+
+  // تصميم البطاقة التعريفية المموجة الحديثة (تشبه GitHub Profile Card)
+  Widget _buildGitHubStyleCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        // خلفية مموجة/تدرج لوني أنيق يشبه بطاقات جيت هب
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1F242D), const Color(0xFF111418)]
+              : [const Color(0xFFF6F8FA), const Color(0xFFEAEEF2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // أيقونة دائرية أو شعار مموج
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: theme.colorScheme.primary.withOpacity(0.15),
+            ),
+            child: Icon(
+              Icons.code_rounded,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Developed by',
+                  style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                InkWell(
+                  onTap: _launchWhatsApp,
+                  child: Text(
+                    'Abdullrahman-Abdullah',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // أيقونة واتساب مصغرة توضح إمكانية الضغط
+          InkWell(
+            onTap: _launchWhatsApp,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 16,
+                color: Colors.green[600],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -537,6 +642,7 @@ class ModernDropMenuScreen extends StatefulWidget {
   final bool isOffersExpanded;
   final bool isThemeExpanded;
   final String userRole;
+  final VoidCallback onWhatsAppTap;
   final void Function(int, bool, bool, bool) onItemSelected;
   final VoidCallback onLogout;
 
@@ -547,6 +653,7 @@ class ModernDropMenuScreen extends StatefulWidget {
     required this.isOffersExpanded,
     required this.isThemeExpanded,
     required this.userRole,
+    required this.onWhatsAppTap,
     required this.onItemSelected,
     required this.onLogout,
   });
@@ -769,6 +876,8 @@ class _ModernDropMenuScreenState extends State<ModernDropMenuScreen> {
                       ],
                     ),
                   ),
+                  // البطاقة التعريفية المموجة في أسفل القائمة المنسدلة للموبايل
+                  _buildGitHubStyleCard(context),
                 ],
               ),
             ),
@@ -777,6 +886,92 @@ class _ModernDropMenuScreenState extends State<ModernDropMenuScreen> {
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(color: Colors.transparent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGitHubStyleCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1F242D), const Color(0xFF111418)]
+              : [const Color(0xFFF6F8FA), const Color(0xFFEAEEF2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: theme.colorScheme.primary.withOpacity(0.15),
+            ),
+            child: Icon(
+              Icons.code_rounded,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Developed by',
+                  style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                InkWell(
+                  onTap: widget.onWhatsAppTap,
+                  child: Text(
+                    'Abdullrahman-Abdullah',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                      decoration: TextDecoration.underline,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: widget.onWhatsAppTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 16,
+                color: Colors.green[600],
+              ),
             ),
           ),
         ],

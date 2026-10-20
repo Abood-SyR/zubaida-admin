@@ -1,8 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:dio/dio.dart';
 import '../../core/services/api_service.dart';
 import '../../core/services/category_service.dart';
 
@@ -25,23 +26,44 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _usageController = TextEditingController();
   final _ingredientsController = TextEditingController();
   final _compatibilityController = TextEditingController();
+
+  final List<TextEditingController> _sizeControllers = [TextEditingController()];
+  final List<Map<String, TextEditingController>> _attributesList = [];
   
   List<dynamic> _categories = [];
   String? _selectedCategoryId;
   String _selectedSkinHairType = 'hair';
-  final String _selectedSize = 'standard';
 
   Uint8List? _thumbnailBytes;
   String? _thumbnailName;
   final List<Map<String, dynamic>> _additionalImages = [];
 
   bool _isLoading = false;
-  double _uploadProgress = 0.0;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descController.dispose();
+    _priceController.dispose();
+    _costPriceController.dispose();
+    _stockController.dispose();
+    _usageController.dispose();
+    _ingredientsController.dispose();
+    _compatibilityController.dispose();
+    for (var c in _sizeControllers) {
+      c.dispose();
+    }
+    for (var attr in _attributesList) {
+      attr['key']?.dispose();
+      attr['value']?.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> _loadCategories() async {
@@ -107,42 +129,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _uploadProgress = 0.05;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      setState(() => _uploadProgress = 0.2);
-      await Supabase.instance.client.storage
-          .from('products')
-          .uploadBinary(_thumbnailName!, _thumbnailBytes!, fileOptions: const FileOptions(upsert: true));
-      
-      final thumbnailUrl = Supabase.instance.client.storage
-          .from('products')
-          .getPublicUrl(_thumbnailName!);
+      List<String> sizesList = _sizeControllers
+          .map((c) => c.text.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (sizesList.isEmpty) sizesList = ['standard'];
 
-      List<String> additionalImageUrls = [];
-      if (_additionalImages.isNotEmpty) {
-        double step = 0.5 / _additionalImages.length;
-        for (int i = 0; i < _additionalImages.length; i++) {
-          final img = _additionalImages[i];
-          await Supabase.instance.client.storage
-              .from('products')
-              .uploadBinary(img['name'], img['bytes'], fileOptions: const FileOptions(upsert: true));
-          
-          final url = Supabase.instance.client.storage
-              .from('products')
-              .getPublicUrl(img['name']);
-          
-          additionalImageUrls.add(url);
-          setState(() {
-            _uploadProgress = 0.3 + (step * (i + 1));
-          });
+      Map<String, dynamic> attributesMap = {};
+      for (var attr in _attributesList) {
+        String key = attr['key']!.text.trim();
+        String val = attr['value']!.text.trim();
+        if (key.isNotEmpty) {
+          attributesMap[key] = val;
         }
       }
-
-      setState(() => _uploadProgress = 0.85);
 
       final productData = {
         "name": {"ar": _nameController.text.trim()},
@@ -150,25 +153,38 @@ class _AddProductScreenState extends State<AddProductScreen> {
         "price": double.parse(_priceController.text),
         "cost_price": double.tryParse(_costPriceController.text) ?? 0.0,
         "stock_quantity": int.parse(_stockController.text),
-        "thumbnail_url": thumbnailUrl,
-        "images": additionalImageUrls.isNotEmpty ? additionalImageUrls : [thumbnailUrl],
-        "sizes": [_selectedSize],
+        "thumbnail_url": "",
+        "images": [],
+        "sizes": sizesList,
         "skin_hair_type": [_selectedSkinHairType],
         "usage_instructions": {"ar": _usageController.text.trim().isNotEmpty ? _usageController.text.trim() : "استخدام عادي"},
         "ingredients": {"ar": _ingredientsController.text.trim().isNotEmpty ? _ingredientsController.text.trim() : "مكونات طبيعية"},
         "compatibility": {"ar": _compatibilityController.text.trim().isNotEmpty ? _compatibilityController.text.trim() : "مناسب لجميع الأنواع"},
-        "attributes": {},
+        "attributes": attributesMap,
         "category_id": _selectedCategoryId,
         "is_active": true,
       };
 
-      await _apiService.dio.post('/products/', data: productData);
+      final formData = FormData();
+      formData.fields.add(MapEntry('product_data_json', jsonEncode(productData)));
 
-      setState(() => _uploadProgress = 1.0);
+      formData.files.add(MapEntry(
+        'thumbnail',
+        MultipartFile.fromBytes(_thumbnailBytes!, filename: _thumbnailName ?? 'thumbnail.jpg'),
+      ));
+
+      for (var img in _additionalImages) {
+        formData.files.add(MapEntry(
+          'additional_images',
+          MultipartFile.fromBytes(img['bytes'], filename: img['name']),
+        ));
+      }
+
+      await _apiService.dio.post('/products/', data: formData);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إضافة المنتج بنجاح'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('تم إضافة المنتج بنجاح عبر السيرفر'), backgroundColor: Colors.green),
       );
       Navigator.pop(context, true);
     } catch (e) {
@@ -204,7 +220,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- قسم الصورة الرئيسية (في البداية وقبل الاسم) ---
                   Text('1. الصورة الرئيسية للمنتج (إلزامي)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                   const SizedBox(height: 8),
                   GestureDetector(
@@ -249,7 +264,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // --- قسم الصور الفرعية بالأسفل ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -325,7 +339,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                   const SizedBox(height: 28),
 
-                  // --- البيانات الأساسية ---
                   const Text('3. البيانات الأساسية', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -395,8 +408,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                   const SizedBox(height: 28),
 
-                  // --- التصنيف والتفاصيل الأخرى ---
-                  const Text('4. التصنيف والمواصفات', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const Text('4. التصنيف والأحجام والخصائص', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -437,7 +449,119 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 20),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('أحجام المنتج', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _sizeControllers.add(TextEditingController());
+                          });
+                        },
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('إضافة حجم'),
+                      ),
+                    ],
+                  ),
+                  ..._sizeControllers.asMap().entries.map((entry) {
+                    int index = entry.key;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _sizeControllers[index],
+                              decoration: InputDecoration(
+                                labelText: 'الحجم ${index + 1}',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                          ),
+                          if (_sizeControllers.length > 1) ...[
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () {
+                                setState(() {
+                                  _sizeControllers[index].dispose();
+                                  _sizeControllers.removeAt(index);
+                                });
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
                   const SizedBox(height: 16),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('خصائص إضافية مخصصة (Attributes)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _attributesList.add({
+                              'key': TextEditingController(),
+                              'value': TextEditingController(),
+                            });
+                          });
+                        },
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('إضافة خاصية'),
+                      ),
+                    ],
+                  ),
+                  ..._attributesList.asMap().entries.map((entry) {
+                    int index = entry.key;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _attributesList[index]['key'],
+                              decoration: InputDecoration(
+                                labelText: 'الخاصية',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _attributesList[index]['value'],
+                              decoration: InputDecoration(
+                                labelText: 'القيمة',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            onPressed: () {
+                              setState(() {
+                                _attributesList[index]['key']?.dispose();
+                                _attributesList[index]['value']?.dispose();
+                                _attributesList.removeAt(index);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 16),
+
                   TextFormField(
                     controller: _usageController,
                     maxLines: 2,
@@ -461,24 +585,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   TextFormField(
                     controller: _compatibilityController,
                     decoration: InputDecoration(
-                      labelText: 'التوافق (مع أنواع الشعر/البشرة)',
+                      labelText: 'التوافق',
                       prefixIcon: const Icon(Icons.check_circle_outline_rounded),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                   ),
                   const SizedBox(height: 36),
 
-                  // --- شريط التقدم وزر الحفظ النهائي ---
-                  if (_isLoading) ...[
-                    LinearProgressIndicator(value: _uploadProgress, minHeight: 8, borderRadius: BorderRadius.circular(4)),
-                    const SizedBox(height: 12),
-                    Center(
-                      child: Text(
-                        'جاري ضغط ورفع الصور وحفظ المنتج... ${(_uploadProgress * 100).toInt()}%',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ),
-                  ] else ...[
+                  if (_isLoading)
+                    const Center(child: CircularProgressIndicator.adaptive())
+                  else
                     SizedBox(
                       width: double.infinity,
                       height: 54,
@@ -491,10 +607,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         ),
                         onPressed: _submitProduct,
                         icon: const Icon(Icons.cloud_upload_rounded),
-                        label: const Text('حفظ وإضافة المنتج للسيرفر', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        label: const Text('حفظ وإضافة المنتج عبر السيرفر', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
-                  ],
                   const SizedBox(height: 40),
                 ],
               ),
