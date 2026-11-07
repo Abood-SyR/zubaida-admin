@@ -517,7 +517,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Developed by',
+                  'POWERED BY',
                   style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 2),
@@ -822,6 +822,7 @@ class _ModernDropMenuScreenState extends State<ModernDropMenuScreen> {
                         ),
 
                         if (widget.userRole == 'admin') _buildItem(4, 'إدارة جلسات المعدلين', Icons.qr_code_rounded),
+                        _buildItem(16, 'QR Code المنتج', Icons.qr_code_2_rounded), // <-- أضف هذا السطر هنا
 
                         _buildItem(5, 'إدارة الفئات', Icons.category_rounded),
                         _buildItem(6, 'إدارة البحث', Icons.search_rounded),
@@ -943,7 +944,7 @@ class _ModernDropMenuScreenState extends State<ModernDropMenuScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Developed by',
+                  'POWERED BY',
                   style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 2),

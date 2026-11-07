@@ -366,7 +366,7 @@ class _QrGeneratorDetailScreenState extends State<QrGeneratorDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final primaryColor = const Color(0xFF1E293B); // لون كحلي داكن شبيق بالصورة
+    const primaryColor = Color(0xFF1E293B); // لون كحلي داكن شبيق بالصورة
 
     return Scaffold(
       appBar: AppBar(

@@ -191,8 +191,9 @@ class ReportDetailScreen extends StatelessWidget {
               ),
               child: Column(
                 children: metrics.entries.map<Widget>((e) {
-                  if (e.key == 'status_breakdown' || e.key == 'report')
+                  if (e.key == 'status_breakdown' || e.key == 'report') {
                     return const SizedBox.shrink();
+                  }
 
                   String displayValue = e.value.toString();
                   if (e.value is List) {
