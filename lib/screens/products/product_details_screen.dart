@@ -479,6 +479,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 children: [
                                   _buildModernInfoCard('سعر البيع', '${_product!['price']} ل.س', Icons.payments_rounded, Colors.green),
                                   const SizedBox(width: 8),
+                                  _buildModernInfoCard('سعر الجملة', '${_product!['wholesale_price'] ?? 0} ل.س', Icons.storefront_rounded, Colors.teal),
+                                    const SizedBox(width: 8),
                                   _buildModernInfoCard('سعر التكلفة', '${_product!['cost_price'] ?? 0} ل.س', Icons.account_balance_wallet_rounded, Colors.purple),
                                   const SizedBox(width: 8),
                                   _buildModernInfoCard('المخزون', '${_product!['stock_quantity']} قطع', Icons.inventory_2_rounded, Colors.orange),

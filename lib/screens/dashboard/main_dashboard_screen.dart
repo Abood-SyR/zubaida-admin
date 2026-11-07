@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart'; // حزمة فتح روابط �
 import '../../core/theme/theme_provider.dart';
 import '../home/home_analytics_screen.dart';
 import '../products/products_screen.dart';
+import '../products/qr_code.dart';
 import '../offers/offers_screen.dart';
 import '../offers/discounts_screen.dart';
 import '../groups/groups_screen.dart';
@@ -265,6 +266,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       case 12: return 'الطلبات المنجزة';
       case 15: return 'إدارة التفضيلات';
       case 4: return 'إدارة جلسات المعدلين';
+      case 16: return 'QR Code المنتج'; 
       default: return 'لوحة التحكم';
     }
   }
@@ -285,6 +287,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
       case 12: return const CompletedOrdersScreen();
       case 15: return const PreferencesScreen();
       case 4: return const QrSessionsScreen();
+      case 16: return const QrCodeScreen(); // <-- المطابقة مع الفهرس 16
       default: return const HomeAnalyticsScreen();
     }
   }
@@ -328,7 +331,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
             children: [
               _navItem(context, 0, 'الرئيسية والإحصائيات', Icons.dashboard_rounded, isMobile),
               _navItem(context, 1, 'المنتجات والمخزون', Icons.inventory_2_rounded, isMobile),
-              
               Theme(
                 data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                 child: Container(
@@ -404,7 +406,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
               ),
 
               if (_userRole == 'admin') _navItem(context, 4, 'إدارة جلسات المعدلين', Icons.qr_code_rounded, isMobile),
-              
+              _navItem(context, 16, 'QR Code المنتج', Icons.qr_code_2_rounded, isMobile), // <-- أضف هذا السطر هنا
               _navItem(context, 5, 'إدارة الفئات', Icons.category_rounded, isMobile),
               _navItem(context, 6, 'إدارة البحث', Icons.search_rounded, isMobile),
               _navItem(context, 7, 'إدارة الواجهات', Icons.web_rounded, isMobile),

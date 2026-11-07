@@ -26,7 +26,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _usageController = TextEditingController();
   final _ingredientsController = TextEditingController();
   final _compatibilityController = TextEditingController();
-
+  final _wholesalePriceController = TextEditingController();
   final List<TextEditingController> _sizeControllers = [TextEditingController()];
   final List<Map<String, TextEditingController>> _attributesList = [];
   
@@ -56,6 +56,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _usageController.dispose();
     _ingredientsController.dispose();
     _compatibilityController.dispose();
+    _wholesalePriceController.dispose();
     for (var c in _sizeControllers) {
       c.dispose();
     }
@@ -152,6 +153,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         "description": {"ar": _descController.text.trim()},
         "price": double.parse(_priceController.text),
         "cost_price": double.tryParse(_costPriceController.text) ?? 0.0,
+        "wholesale_price": double.tryParse(_wholesalePriceController.text) ?? 0.0,
         "stock_quantity": int.parse(_stockController.text),
         "thumbnail_url": "",
         "images": [],
@@ -365,47 +367,72 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _priceController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'سعر البيع',
-                            prefixIcon: const Icon(Icons.payments_outlined),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          validator: (v) => v!.isEmpty ? 'حقل مطلوب' : null,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _costPriceController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'سعر التكلفة',
-                            prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _stockController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'المخزون',
-                            prefixIcon: const Icon(Icons.inventory_2_outlined),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          validator: (v) => v!.isEmpty ? 'حقل مطلوب' : null,
-                        ),
-                      ),
-                    ],
-                  ),
+                  Column(
+  children: [
+    // الصف الأول: سعر البيع وسعر الجملة
+    Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: _priceController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'سعر البيع',
+              prefixIcon: const Icon(Icons.payments_outlined),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            validator: (v) => v!.isEmpty ? 'حقل مطلوب' : null,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextFormField(
+            controller: _wholesalePriceController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'سعر الجملة',
+              prefixIcon: const Icon(Icons.storefront_outlined),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ),
+      ],
+    ),
+    
+    const SizedBox(height: 16), // مسافة عمودية بين الصفين
+
+    // الصف الثاني: سعر التكلفة والمخزون
+    Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: _costPriceController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'سعر التكلفة',
+              prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: TextFormField(
+            controller: _stockController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'المخزون',
+              prefixIcon: const Icon(Icons.inventory_2_outlined),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            validator: (v) => v!.isEmpty ? 'حقل مطلوب' : null,
+          ),
+        ),
+      ],
+    ),
+  ],
+),
+
                   const SizedBox(height: 28),
 
                   const Text('4. التصنيف والأحجام والخصائص', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
