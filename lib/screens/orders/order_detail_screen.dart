@@ -22,6 +22,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   final Map<String, bool> _loadingItems = {};
   final Set<String> _checkedKeys = {};
 
+  final TextEditingController _invoiceVerifyController = TextEditingController();
+  bool _isVerifyingInvoice = false;
+  Map<String, dynamic>? _verificationResult;
+
   @override
   void initState() {
     super.initState();
@@ -29,10 +33,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     _fetchMissingItemNames();
   }
 
+  @override
+  void dispose() {
+    _invoiceVerifyController.dispose();
+    super.dispose();
+  }
+
   void _fetchMissingItemNames() async {
-    final items = (_currentOrder['items'] as List?) ??
-        (_currentOrder['items_details'] as List?) ??
-        (_currentOrder['order_items'] as List?) ??
+    final items = (_currentOrder['items'] as List<dynamic>?) ??
+        (_currentOrder['items_details'] as List<dynamic>?) ??
+        (_currentOrder['order_items'] as List<dynamic>?) ??
         [];
 
     for (int i = 0; i < items.length; i++) {
@@ -85,6 +95,35 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  Future<void> _verifyInvoiceOnServer(String invoiceNum) async {
+    if (invoiceNum.isEmpty) return;
+    setState(() {
+      _isVerifyingInvoice = true;
+      _verificationResult = null;
+    });
+
+    try {
+      final orderId = (_currentOrder['order_id'] ?? _currentOrder['id'] ?? '').toString();
+      Response response = await _apiService.dio.get(
+        '/orders/verify-invoice/$invoiceNum',
+        queryParameters: {'current_order_id': orderId},
+      );
+      if (response.statusCode == 200 && mounted) {
+        setState(() {
+          _verificationResult = response.data;
+          _isVerifyingInvoice = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isVerifyingInvoice = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فشل الاتصال للتحقق من رقم الحوالة'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   void _showCancelConfirmationDialog() {
     final TextEditingController textController = TextEditingController();
     const requiredText = "انا مسؤول عن الغاء الطلب";
@@ -108,13 +147,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8)),
                 child: const SelectableText(
                   requiredText,
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
                       fontSize: 13),
                 ),
               ),
@@ -184,7 +222,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     width: maxDrag + 50,
                     height: 55,
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.15),
+                      color: Colors.green.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Stack(
@@ -259,7 +297,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         queryParameters: {'new_status': newStatus},
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && mounted) {
         setState(() {
           _currentOrder['status'] = newStatus;
           _isUpdating = false;
@@ -271,12 +309,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         );
       }
     } catch (e) {
-      setState(() => _isUpdating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('فشل تحديث حالة الطلب، تأكد من الاتصال'),
-            backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        setState(() => _isUpdating = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('فشل تحديث حالة الطلب، تأكد من الاتصال'),
+              backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -290,31 +330,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   Future<void> _openProofUrl(String proofUrlOrPath) async {
     try {
-      // إظهار مؤشر تحميل أثناء جلب الملف بالصلاحيات
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      // استخراج اسم الملف فقط (Filename) سواء كان مساراً كاملاً أو رابطاً قديماً
       String filename = proofUrlOrPath.split('/').last;
-
-      // ضبط مسار الـ Endpoint الآمن الجديد في السيرفر الخاص بك
       final String secureEndpoint = '/orders/htfiles/$filename';
       
-      // استخدام Dio الخاص بـ ApiService لضمان إرسال توكن الأدمن/المعدل تلقائياً
       Response<List<int>> response = await _apiService.dio.get<List<int>>(
         secureEndpoint,
         options: Options(responseType: ResponseType.bytes),
       );
 
-      Navigator.of(context).pop(); // إغلاق مؤشر التحميل
+      if (mounted) Navigator.of(context).pop();
 
-      if (response.statusCode == 200 && response.data != null) {
+      if (response.statusCode == 200 && response.data != null && mounted) {
         final bytes = response.data!;
         
-        // عرض الصورة أو الملف في نافذة منبثقة داخلية (Dialog)
         showDialog(
           context: context,
           builder: (context) => Dialog(
@@ -344,7 +378,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           UriData.fromBytes(bytes).contentAsBytes(),
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
-                            // إذا لم تكن صورة (مثل ملف PDF)، عرض رسالة نجاح التحميل
                             return const Center(
                               child: Text(
                                 'تم تحميل مستند إثبات التحويل (PDF) بنجاح عبر السيرفر.',
@@ -364,10 +397,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         );
       }
     } catch (e) {
-      if (Navigator.canPop(context)) Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فشل جلب إثبات التحويل، تأكد من صلاحيات حسابك والاتصال'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        if (Navigator.canPop(context)) Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فشل جلب إثبات التحويل، تأكد من صلاحيات حسابك والاتصال'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -405,9 +440,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  List<Map<String, dynamic>> _groupOrderItems(List<dynamic> rawItems) {
+  List _groupOrderItems(List<dynamic> rawItems) {
     final Map<String, List<dynamic>> groupedMap = {};
-    final List<Map<String, dynamic>> finalResult = [];
+    final List finalResult = [];
 
     for (var item in rawItems) {
       final itemType = item['item_type'] ?? 'product';
@@ -482,9 +517,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       coordinates = addressData['coordinates'];
     }
 
-    final rawItems = (_currentOrder['items'] as List?) ??
-        (_currentOrder['items_details'] as List?) ??
-        (_currentOrder['order_items'] as List?) ??
+    final rawItems = (_currentOrder['items'] as List<dynamic>?) ??
+        (_currentOrder['items_details'] as List<dynamic>?) ??
+        (_currentOrder['order_items'] as List<dynamic>?) ??
         [];
 
     final groupedItems = _groupOrderItems(rawItems);
@@ -508,7 +543,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 4))
                 ],
@@ -525,7 +560,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: _getStatusColor(status).withOpacity(0.1),
+                          color: _getStatusColor(status).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(_translateStatus(status),
@@ -581,7 +616,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 label: const Text('إلغاء الطلب'),
                                 style: TextButton.styleFrom(
                                   foregroundColor: Colors.red,
-                                  backgroundColor: Colors.red.withOpacity(0.08),
+                                  backgroundColor: Colors.red.withValues(alpha: 0.08),
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10)),
                                   padding: const EdgeInsets.symmetric(
@@ -602,7 +637,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 4))
                 ],
@@ -695,7 +730,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       final isGrouped = group['isGrouped'] as bool;
 
                       if (!isGrouped) {
-                        // عنصر فردي عادي (منتج أساسي)
                         final item = group['item'];
                         final productId = item['product_id']?.toString();
                         final itemName = _extractName(item['product_name'], 'منتج');
@@ -703,7 +737,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         final unitPrice = (item['unit_price'] ?? 0).toDouble();
                         final itemTotal = unitPrice * quantity;
                         
-                        // مفتاح فريد وثابت للعنصر المفرد
                         final checkKey = item['id']?.toString() ?? 'single_$groupIndex';
                         final isChecked = _checkedKeys.contains(checkKey);
 
@@ -711,9 +744,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isChecked ? Colors.green.withOpacity(0.05) : theme.cardColor,
+                            color: isChecked ? Colors.green.withValues(alpha: 0.05) : theme.cardColor,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: isChecked ? Colors.green.withOpacity(0.3) : Colors.transparent, width: 1.5),
+                            border: Border.all(color: isChecked ? Colors.green.withValues(alpha: 0.3) : Colors.transparent, width: 1.5),
                           ),
                           child: Row(
                             children: [
@@ -741,7 +774,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                         children: [
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                                            decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                                             child: const Text('منتج', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
                                           ),
                                           const SizedBox(width: 8),
@@ -751,7 +784,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                               style: TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 14,
-                                                // يتم التشطيب فقط إذا كان isChecked صحيحاً
                                                 decoration: isChecked ? TextDecoration.lineThrough : TextDecoration.none,
                                                 color: isChecked ? Colors.grey : theme.textTheme.bodyLarge?.color,
                                               ),
@@ -770,7 +802,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           ),
                         );
                       } else {
-                        // عرض أو مجموعة تحتوي على عدة منتجات
                         final parentName = group['parent_name'] as String;
                         final itemType = group['item_type'] as String;
                         final subItems = group['sub_items'] as List<dynamic>;
@@ -782,7 +813,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           decoration: BoxDecoration(
                             color: theme.cardColor,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: badgeColor.withOpacity(0.3), width: 1.5),
+                            border: Border.all(color: badgeColor.withValues(alpha: 0.3), width: 1.5),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -791,7 +822,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(color: badgeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                                    decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                                     child: Text(parentName, style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold)),
                                   ),
                                 ],
@@ -806,7 +837,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 final quantity = sub['quantity'] ?? 1;
                                 final unitPrice = (sub['unit_price'] ?? 0).toDouble();
                                 
-                                // مفتاح فريد ومستقل تماماً لكل عنصر فرعي بناءً على معرفه الفريد
                                 final checkKey = 'group_${group['source_id']}_item_$subId';
                                 final isChecked = _checkedKeys.contains(checkKey);
 
@@ -840,7 +870,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 13,
                                                   color: Colors.blue.shade700,
-                                                  // يتم التشطيب فقط وفقط إذا كان الـ Checkbox الخاص بهذا المنتج محدد تماماً
                                                   decoration: isChecked ? TextDecoration.lineThrough : TextDecoration.none,
                                                 ),
                                               ),
@@ -868,7 +897,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 4))
                 ],
@@ -929,6 +958,64 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       ],
                     ),
                   ],
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: theme.dividerColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('التحقق اليدوي من رقم الحوالة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _invoiceVerifyController,
+                                decoration: InputDecoration(
+                                  hintText: 'أدخل رقم الحوالة للبحث...',
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                  fillColor: theme.cardColor,
+                                  filled: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _isVerifyingInvoice 
+                                  ? null 
+                                  : () => _verifyInvoiceOnServer(_invoiceVerifyController.text.trim()),
+                              style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary),
+                              child: _isVerifyingInvoice 
+                                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: theme.colorScheme.onPrimary, strokeWidth: 2))
+                                  : Text('تحقق', style: TextStyle(color: theme.colorScheme.onPrimary)),
+                            ),
+                          ],
+                        ),
+                        if (_verificationResult != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _verificationResult!['message'],
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _verificationResult!['exists'] ? Colors.red : Colors.green,
+                              fontSize: 12,
+                            ),
+                          ),
+                          if (_verificationResult!['exists'] == true)
+                            Text(
+                              'مرتبط بالطلب رقم: ${_verificationResult!['order_id'].toString().substring(0, 8)}',
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
                   const Divider(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

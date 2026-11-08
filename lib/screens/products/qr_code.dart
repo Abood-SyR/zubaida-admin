@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:web/web.dart' as web;
+import 'dart:js_interop';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -336,11 +338,46 @@ class _QrGeneratorDetailScreenState extends State<QrGeneratorDetailScreen> {
   }
 
   Future<void> _saveOrShareImage() async {
-    final imageBytes = await _captureQrPngBytes();
-    if (imageBytes != null) {
-      await Printing.sharePdf(bytes: imageBytes, filename: 'qr_${widget.productName}.png');
+  try {
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    RenderRepaintBoundary? boundary =
+        _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    
+    if (boundary == null) return;
+
+    ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+    ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    
+    if (byteData == null) return;
+    
+    Uint8List imageBytes = byteData.buffer.asUint8List();
+
+    // الطريقة الحديثة المتوافقة مع package:web للتعامل مع تحميل الملفات على الويب
+    final blob = web.Blob(
+      [imageBytes.toJS].toJS,
+      web.BlobPropertyBag(type: 'image/png'),
+    );
+    final url = web.URL.createObjectURL(blob);
+    
+    final anchor = web.document.createElement('a') as web.HTMLAnchorElement
+      ..href = url
+      ..download = 'qr_${widget.productName}.png';
+    
+    web.document.body?.appendChild(anchor);
+    anchor.click();
+    web.document.body?.removeChild(anchor);
+    
+    web.URL.revokeObjectURL(url);
+
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('فشل حفظ الصورة: $e'), backgroundColor: Colors.red),
+      );
     }
   }
+}
 
   Future<void> _exportPdf() async {
     final imageBytes = await _captureQrPngBytes();
@@ -461,11 +498,11 @@ class _QrGeneratorDetailScreenState extends State<QrGeneratorDetailScreen> {
                             size: 240.0,
                             backgroundColor: Colors.white,
                             // تلوين البكسلات والمربعات بلون موحد داكن مثل الصورة
-                            eyeStyle: QrEyeStyle(
+                            eyeStyle: const QrEyeStyle(
                               eyeShape: QrEyeShape.square,
                               color: primaryColor,
                             ),
-                            dataModuleStyle: QrDataModuleStyle(
+                            dataModuleStyle: const QrDataModuleStyle(
                               dataModuleShape: QrDataModuleShape.square,
                               color: primaryColor,
                             ),
